@@ -1,0 +1,3 @@
+# Local app configuration
+Config/*.local.xcconfig
+chorra/Configuration/*.local.xcconfig

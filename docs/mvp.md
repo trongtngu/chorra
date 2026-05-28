@@ -193,12 +193,14 @@ Each task has a point value set by the parent. The child does not receive points
 
 The MVP should show each child a current points balance and enough history to understand which completed tasks earned points.
 
+Parents can also maintain a household reward catalog. A reward has a name, optional description, point cost, and optional image. Children can redeem active rewards immediately when they have enough points, and redemptions reduce the derived point balance while preserving a redemption history for both parent and child.
+
 Deferred reward features:
 
 - Money allowance.
 - Payments.
 - Marketplace redemption.
-- Parent-defined reward catalog.
+- Parent approval before reward redemption.
 - Point expiration.
 - Negative adjustments.
 - Multi-currency or cash conversion.
@@ -221,6 +223,9 @@ Included:
 - Approve or reject submission.
 - Award points after approval.
 - Child points balance.
+- Parent-defined reward catalog.
+- Child reward redemption.
+- Parent and child redemption history.
 
 Deferred:
 
@@ -297,4 +302,3 @@ These are intentionally deferred until the core loop is working:
 - Whether tasks can be shared by multiple children.
 - Whether parent approval should require comments on rejection.
 - Whether photo evidence can be optional per task.
-

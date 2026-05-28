@@ -14,6 +14,8 @@ struct ParentDashboardData: Hashable {
     let children: [Child]
     let balances: [ChildPointsBalance]
     let taskItems: [ParentTaskItem]
+    let rewards: [RewardItem]
+    let redemptions: [RewardRedemptionItem]
 }
 
 struct ChildDashboardData: Hashable {
@@ -21,6 +23,14 @@ struct ChildDashboardData: Hashable {
     let tasks: [ChildTaskItem]
     let balance: ChildPointsBalance?
     let ledger: [PointsLedgerEntry]
+    let rewards: [RewardItem]
+    let redemptions: [RewardRedemptionItem]
+}
+
+enum RewardImageUpdate: Hashable {
+    case keep
+    case remove
+    case replace(Data)
 }
 
 final class ChorraService {
@@ -158,10 +168,121 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
+    func createReward(name: String, description: String, pointCost: Int, jpegData: Data?) async throws -> ParentDashboardData {
+        let profile = try await fetchCurrentProfile()
+        guard profile.role == .parent else {
+            throw ChorraServiceError.unexpectedRole
+        }
+
+        let rewardId = UUID()
+        let imageStoragePath: String?
+
+        if let jpegData {
+            imageStoragePath = try await uploadRewardImage(
+                householdId: profile.householdId,
+                rewardId: rewardId,
+                jpegData: jpegData
+            )
+        } else {
+            imageStoragePath = nil
+        }
+
+        let _: Reward = try await client
+            .rpc("create_reward", params: CreateRewardParams(
+                pName: name,
+                pDescription: description,
+                pPointCost: pointCost,
+                pImageStoragePath: imageStoragePath,
+                pRewardId: rewardId
+            ))
+            .execute()
+            .value
+
+        return try await loadParentDashboard(profile: profile)
+    }
+
+    func updateReward(
+        reward: Reward,
+        name: String,
+        description: String,
+        pointCost: Int,
+        imageUpdate: RewardImageUpdate
+    ) async throws -> ParentDashboardData {
+        let imageStoragePath: String?
+
+        switch imageUpdate {
+        case .keep:
+            imageStoragePath = reward.imageStoragePath
+        case .remove:
+            imageStoragePath = nil
+        case .replace(let jpegData):
+            imageStoragePath = try await uploadRewardImage(
+                householdId: reward.householdId,
+                rewardId: reward.id,
+                jpegData: jpegData
+            )
+        }
+
+        let _: Reward = try await client
+            .rpc("update_reward", params: UpdateRewardParams(
+                pRewardId: reward.id,
+                pName: name,
+                pDescription: description,
+                pPointCost: pointCost,
+                pImageStoragePath: imageStoragePath
+            ))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func archiveReward(_ reward: Reward) async throws -> ParentDashboardData {
+        let _: Reward = try await client
+            .rpc("archive_reward", params: ArchiveRewardParams(pRewardId: reward.id))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func redeemReward(_ reward: Reward, child: Child) async throws -> ChildDashboardData {
+        let _: RewardRedemption = try await client
+            .rpc("redeem_reward", params: RedeemRewardParams(pRewardId: reward.id))
+            .execute()
+            .value
+
+        return try await loadChildDashboard(child: child)
+    }
+
     func signedTaskPhotoURL(path: String) async throws -> URL {
         try await client.storage
             .from("task-photos")
             .createSignedURL(path: path, expiresIn: 60 * 10)
+    }
+
+    func signedRewardImageURL(path: String) async throws -> URL {
+        try await client.storage
+            .from("reward-images")
+            .createSignedURL(path: path, expiresIn: 60 * 10)
+    }
+
+    private func uploadRewardImage(householdId: UUID, rewardId: UUID, jpegData: Data) async throws -> String {
+        let storagePath = "\(householdId.uuidString)/\(rewardId.uuidString)/\(UUID().uuidString).jpg"
+
+        try await client.storage
+            .from("reward-images")
+            .upload(
+                storagePath,
+                data: jpegData,
+                options: FileOptions(
+                    cacheControl: "3600",
+                    contentType: "image/jpeg",
+                    upsert: false
+                )
+            )
+
+        return storagePath
     }
 
     private func loadCurrentParentDashboard() async throws -> ParentDashboardData {
@@ -223,6 +344,21 @@ final class ChorraService {
             .execute()
             .value
 
+        let rewards: [Reward] = try await client
+            .from("rewards")
+            .select()
+            .eq("household_id", value: profile.householdId.uuidString)
+            .eq("is_archived", value: false)
+            .execute()
+            .value
+
+        let redemptions: [RewardRedemption] = try await client
+            .from("reward_redemptions")
+            .select()
+            .eq("household_id", value: profile.householdId.uuidString)
+            .execute()
+            .value
+
         let taskItems = await buildParentTaskItems(
             tasks: tasks,
             assignments: assignments,
@@ -230,13 +366,16 @@ final class ChorraService {
             submissions: submissions,
             images: images
         )
+        let redemptionItems = buildRedemptionItems(redemptions: redemptions, children: children)
 
         return ParentDashboardData(
             profile: profile,
             household: household,
             children: children.sorted { $0.displayName < $1.displayName },
             balances: balances,
-            taskItems: taskItems
+            taskItems: taskItems,
+            rewards: buildRewardItems(rewards: rewards),
+            redemptions: redemptionItems
         )
     }
 
@@ -271,6 +410,20 @@ final class ChorraService {
             .execute()
             .value
 
+        let rewards: [Reward] = try await client
+            .from("rewards")
+            .select()
+            .eq("is_archived", value: false)
+            .execute()
+            .value
+
+        let redemptions: [RewardRedemption] = try await client
+            .from("reward_redemptions")
+            .select()
+            .eq("child_id", value: child.id.uuidString)
+            .execute()
+            .value
+
         let submissionsByAssignment = Dictionary(grouping: submissions, by: \.assignmentId)
         let ledgerByTask = Dictionary(grouping: ledger, by: \.taskId)
         let tasksById = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
@@ -296,7 +449,9 @@ final class ChorraService {
             child: child,
             tasks: childTasks,
             balance: balances.first(where: { $0.childId == child.id }),
-            ledger: ledger.sorted { $0.createdAt > $1.createdAt }
+            ledger: ledger.sorted { $0.createdAt > $1.createdAt },
+            rewards: buildRewardItems(rewards: rewards),
+            redemptions: buildRedemptionItems(redemptions: redemptions, children: [child])
         )
     }
 
@@ -340,6 +495,26 @@ final class ChorraService {
                 )
             }
             .sorted { $0.task.createdAt > $1.task.createdAt }
+    }
+
+    private func buildRewardItems(rewards: [Reward]) -> [RewardItem] {
+        rewards
+            .map { RewardItem(reward: $0, signedImageURL: nil) }
+            .sorted { $0.reward.createdAt > $1.reward.createdAt }
+    }
+
+    private func buildRedemptionItems(redemptions: [RewardRedemption], children: [Child]) -> [RewardRedemptionItem] {
+        let childrenById = Dictionary(uniqueKeysWithValues: children.map { ($0.id, $0) })
+
+        return redemptions
+            .map { redemption in
+                RewardRedemptionItem(
+                    redemption: redemption,
+                    child: childrenById[redemption.childId],
+                    signedImageURL: nil
+                )
+            }
+            .sorted { $0.redemption.redeemedAt > $1.redemption.redeemedAt }
     }
 }
 
@@ -429,5 +604,53 @@ private struct ReviewTaskSubmissionParams: Encodable {
         case pSubmissionId = "p_submission_id"
         case pDecision = "p_decision"
         case pRejectionReason = "p_rejection_reason"
+    }
+}
+
+private struct CreateRewardParams: Encodable {
+    let pName: String
+    let pDescription: String
+    let pPointCost: Int
+    let pImageStoragePath: String?
+    let pRewardId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pName = "p_name"
+        case pDescription = "p_description"
+        case pPointCost = "p_point_cost"
+        case pImageStoragePath = "p_image_storage_path"
+        case pRewardId = "p_reward_id"
+    }
+}
+
+private struct UpdateRewardParams: Encodable {
+    let pRewardId: UUID
+    let pName: String
+    let pDescription: String
+    let pPointCost: Int
+    let pImageStoragePath: String?
+
+    enum CodingKeys: String, CodingKey {
+        case pRewardId = "p_reward_id"
+        case pName = "p_name"
+        case pDescription = "p_description"
+        case pPointCost = "p_point_cost"
+        case pImageStoragePath = "p_image_storage_path"
+    }
+}
+
+private struct ArchiveRewardParams: Encodable {
+    let pRewardId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pRewardId = "p_reward_id"
+    }
+}
+
+private struct RedeemRewardParams: Encodable {
+    let pRewardId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pRewardId = "p_reward_id"
     }
 }

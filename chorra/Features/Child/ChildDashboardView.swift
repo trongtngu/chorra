@@ -13,6 +13,8 @@ struct ChildDashboardView: View {
     @EnvironmentObject private var appModel: AppViewModel
     let data: ChildDashboardData
 
+    @State private var rewardToRedeem: RewardItem?
+
     var body: some View {
         NavigationStack {
             List {
@@ -33,6 +35,8 @@ struct ChildDashboardView: View {
                     .padding(.vertical, 4)
                 }
 
+                rewardsSection
+
                 Section("Tasks") {
                     if data.tasks.isEmpty {
                         Text("No tasks assigned")
@@ -52,6 +56,8 @@ struct ChildDashboardView: View {
                         }
                     }
                 }
+
+                redemptionsSection
 
                 Section("Earned") {
                     if data.ledger.isEmpty {
@@ -87,7 +93,107 @@ struct ChildDashboardView: View {
                     .disabled(appModel.isWorking)
                 }
             }
+            .alert("Redeem reward?", isPresented: redeemConfirmationBinding, presenting: rewardToRedeem) { item in
+                Button("Redeem for \(item.reward.pointCost) pts") {
+                    Task { await appModel.redeemReward(item.reward) }
+                }
+                .disabled(appModel.isWorking)
+
+                Button("Cancel", role: .cancel) {
+                    rewardToRedeem = nil
+                }
+            } message: { item in
+                Text(item.reward.name)
+            }
         }
+    }
+
+    private var rewardsSection: some View {
+        Section("Rewards") {
+            if data.rewards.isEmpty {
+                Text("No rewards available")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(data.rewards) { item in
+                    ChildRewardRowView(
+                        item: item,
+                        balance: data.balance?.points ?? 0
+                    ) {
+                        rewardToRedeem = item
+                    }
+                    .disabled(appModel.isWorking)
+                }
+            }
+        }
+    }
+
+    private var redemptionsSection: some View {
+        Section("Reward history") {
+            if data.redemptions.isEmpty {
+                Text("No rewards redeemed yet")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(data.redemptions) { item in
+                    RewardRedemptionRowView(item: item, showsChild: false)
+                }
+            }
+        }
+    }
+
+    private var redeemConfirmationBinding: Binding<Bool> {
+        Binding {
+            rewardToRedeem != nil
+        } set: { isPresented in
+            if !isPresented {
+                rewardToRedeem = nil
+            }
+        }
+    }
+}
+
+private struct ChildRewardRowView: View {
+    let item: RewardItem
+    let balance: Int
+    let onRedeem: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RewardThumbnailView(url: item.signedImageURL, size: 64)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.reward.name)
+                    .font(.headline)
+
+                if let description = item.reward.description, !description.isEmpty {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("\(item.reward.pointCost) pts")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(canRedeem ? Color.chorraPrimary : .secondary)
+
+                    if !canRedeem {
+                        Text("\(item.reward.pointCost - balance) more needed")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button("Redeem") {
+                    onRedeem()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canRedeem)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var canRedeem: Bool {
+        balance >= item.reward.pointCost
     }
 }
 
@@ -249,7 +355,9 @@ private struct ChildTaskDetailView: View {
         ),
         tasks: [],
         balance: nil,
-        ledger: []
+        ledger: [],
+        rewards: [],
+        redemptions: []
     ))
     .environmentObject(AppViewModel())
 }

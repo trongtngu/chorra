@@ -5,7 +5,9 @@
 //  Created by Codex on 27/5/2026.
 //
 
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct ParentDashboardView: View {
     @EnvironmentObject private var appModel: AppViewModel
@@ -13,6 +15,8 @@ struct ParentDashboardView: View {
 
     @State private var showingAddChild = false
     @State private var showingCreateTask = false
+    @State private var showingCreateReward = false
+    @State private var editingReward: RewardItem?
 
     var body: some View {
         NavigationStack {
@@ -20,6 +24,8 @@ struct ParentDashboardView: View {
                 householdSection
                 childrenSection
                 tasksSection
+                rewardsSection
+                redemptionsSection
             }
             .navigationTitle("Parent")
             .toolbar {
@@ -43,6 +49,14 @@ struct ParentDashboardView: View {
             }
             .sheet(isPresented: $showingCreateTask) {
                 CreateTaskView(children: data.children)
+                    .environmentObject(appModel)
+            }
+            .sheet(isPresented: $showingCreateReward) {
+                RewardFormView(item: nil)
+                    .environmentObject(appModel)
+            }
+            .sheet(item: $editingReward) { item in
+                RewardFormView(item: item)
                     .environmentObject(appModel)
             }
         }
@@ -113,6 +127,43 @@ struct ParentDashboardView: View {
             .disabled(data.children.isEmpty)
         } header: {
             Text("Tasks")
+        }
+    }
+
+    private var rewardsSection: some View {
+        Section {
+            if data.rewards.isEmpty {
+                Text("No rewards yet")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(data.rewards) { item in
+                    ParentRewardRowView(item: item) {
+                        editingReward = item
+                    }
+                    .environmentObject(appModel)
+                }
+            }
+
+            Button("Create reward") {
+                showingCreateReward = true
+            }
+        } header: {
+            Text("Rewards")
+        }
+    }
+
+    private var redemptionsSection: some View {
+        Section {
+            if data.redemptions.isEmpty {
+                Text("No rewards redeemed yet")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(data.redemptions) { item in
+                    RewardRedemptionRowView(item: item, showsChild: true)
+                }
+            }
+        } header: {
+            Text("Reward history")
         }
     }
 
@@ -229,6 +280,117 @@ private struct ParentTaskRowView: View {
         case .completed:
             return .chorraSuccess
         }
+    }
+}
+
+private struct ParentRewardRowView: View {
+    @EnvironmentObject private var appModel: AppViewModel
+    let item: RewardItem
+    let onEdit: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RewardThumbnailView(url: item.signedImageURL, size: 64)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.reward.name)
+                    .font(.headline)
+
+                if let description = item.reward.description, !description.isEmpty {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("\(item.reward.pointCost) pts")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.chorraPrimary)
+
+                HStack {
+                    Button("Edit") {
+                        onEdit()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appModel.isWorking)
+
+                    Button("Archive") {
+                        Task { await appModel.archiveReward(item.reward) }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.chorraError)
+                    .disabled(appModel.isWorking)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+struct RewardRedemptionRowView: View {
+    let item: RewardRedemptionItem
+    let showsChild: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RewardThumbnailView(url: item.signedImageURL, size: 52)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.redemption.rewardName)
+                    .font(.headline)
+
+                if showsChild, let child = item.child {
+                    Text(child.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Text("-\(item.redemption.rewardPointCost) pts")
+                    Text(item.redemption.redeemedAt)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct RewardThumbnailView: View {
+    let url: URL?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        placeholder
+                    @unknown default:
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Color.chorraSoftSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipped()
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "gift.fill")
+            .font(.title3)
+            .foregroundStyle(Color.chorraPrimary)
     }
 }
 
@@ -353,6 +515,156 @@ private struct CreateTaskView: View {
     }
 }
 
+private struct RewardFormView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appModel: AppViewModel
+
+    let reward: Reward?
+    let existingImageURL: URL?
+
+    @State private var name: String
+    @State private var description: String
+    @State private var pointCost: Int
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedImage: UIImage?
+    @State private var selectedJPEGData: Data?
+    @State private var imageRemoved = false
+
+    init(item: RewardItem?) {
+        reward = item?.reward
+        existingImageURL = item?.signedImageURL
+        _name = State(initialValue: item?.reward.name ?? "")
+        _description = State(initialValue: item?.reward.description ?? "")
+        _pointCost = State(initialValue: item?.reward.pointCost ?? 25)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Reward") {
+                    TextField("Name", text: $name)
+                    TextField("Description", text: $description, axis: .vertical)
+                    Stepper("\(pointCost) pts", value: $pointCost, in: 1...100000)
+                }
+
+                Section("Image") {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Label("Choose image", systemImage: "photo")
+                    }
+
+                    if let selectedImage {
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
+                            .clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else if !imageRemoved, let existingImageURL {
+                        AsyncImage(url: existingImageURL) { phase in
+                            switch phase {
+                            case .empty:
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, minHeight: 180)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
+                                    .clipped()
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            case .failure:
+                                Text("Image unavailable")
+                                    .foregroundStyle(.secondary)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    }
+
+                    if selectedImage != nil || (!imageRemoved && existingImageURL != nil) {
+                        Button("Remove image", role: .destructive) {
+                            selectedPhotoItem = nil
+                            selectedImage = nil
+                            selectedJPEGData = nil
+                            imageRemoved = true
+                        }
+                    }
+                }
+            }
+            .navigationTitle(reward == nil ? "Create reward" : "Edit reward")
+            .onChange(of: selectedPhotoItem) { _, newItem in
+                Task {
+                    await loadPhoto(from: newItem)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            await save()
+                            if appModel.errorMessage == nil {
+                                dismiss()
+                            }
+                        }
+                    }
+                    .disabled(appModel.isWorking || !canSave)
+                }
+            }
+        }
+    }
+
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func save() async {
+        if let reward {
+            let imageUpdate: RewardImageUpdate
+
+            if let selectedJPEGData {
+                imageUpdate = .replace(selectedJPEGData)
+            } else if imageRemoved {
+                imageUpdate = .remove
+            } else {
+                imageUpdate = .keep
+            }
+
+            await appModel.updateReward(
+                reward: reward,
+                name: name,
+                description: description,
+                pointCost: pointCost,
+                imageUpdate: imageUpdate
+            )
+        } else {
+            await appModel.createReward(
+                name: name,
+                description: description,
+                pointCost: pointCost,
+                jpegData: selectedJPEGData
+            )
+        }
+    }
+
+    private func loadPhoto(from item: PhotosPickerItem?) async {
+        guard let data = try? await item?.loadTransferable(type: Data.self),
+              let image = UIImage(data: data),
+              let jpegData = image.jpegData(compressionQuality: 0.82) else {
+            selectedImage = nil
+            selectedJPEGData = nil
+            return
+        }
+
+        selectedImage = image
+        selectedJPEGData = jpegData
+        imageRemoved = false
+    }
+}
+
 #Preview {
     ParentDashboardView(data: ParentDashboardData(
         profile: Profile(
@@ -373,7 +685,9 @@ private struct CreateTaskView: View {
         ),
         children: [],
         balances: [],
-        taskItems: []
+        taskItems: [],
+        rewards: [],
+        redemptions: []
     ))
     .environmentObject(AppViewModel())
 }

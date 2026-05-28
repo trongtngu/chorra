@@ -233,6 +233,58 @@ struct ChildPointsBalance: Codable, Identifiable, Hashable {
     }
 }
 
+struct Reward: Codable, Identifiable, Hashable {
+    let id: UUID
+    let householdId: UUID
+    let createdBy: UUID
+    let name: String
+    let description: String?
+    let pointCost: Int
+    let imageStoragePath: String?
+    let isArchived: Bool
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case householdId = "household_id"
+        case createdBy = "created_by"
+        case name
+        case description
+        case pointCost = "point_cost"
+        case imageStoragePath = "image_storage_path"
+        case isArchived = "is_archived"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct RewardRedemption: Codable, Identifiable, Hashable {
+    let id: UUID
+    let householdId: UUID
+    let childId: UUID
+    let rewardId: UUID
+    let redeemedBy: UUID
+    let rewardName: String
+    let rewardDescription: String?
+    let rewardPointCost: Int
+    let rewardImageStoragePath: String?
+    let redeemedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case householdId = "household_id"
+        case childId = "child_id"
+        case rewardId = "reward_id"
+        case redeemedBy = "redeemed_by"
+        case rewardName = "reward_name"
+        case rewardDescription = "reward_description"
+        case rewardPointCost = "reward_point_cost"
+        case rewardImageStoragePath = "reward_image_storage_path"
+        case redeemedAt = "redeemed_at"
+    }
+}
+
 struct ParentTaskItem: Identifiable, Hashable {
     let task: ChorraTask
     let assignment: TaskAssignment?
@@ -253,3 +305,17 @@ struct ChildTaskItem: Identifiable, Hashable {
     var id: UUID { assignment.id }
 }
 
+struct RewardItem: Identifiable, Hashable {
+    let reward: Reward
+    var signedImageURL: URL?
+
+    var id: UUID { reward.id }
+}
+
+struct RewardRedemptionItem: Identifiable, Hashable {
+    let redemption: RewardRedemption
+    let child: Child?
+    var signedImageURL: URL?
+
+    var id: UUID { redemption.id }
+}

@@ -221,21 +221,6 @@ private struct ChildRewardsTab: View {
                 }
             }
 
-            ChorraSectionHeader(title: "Reward history")
-
-            ChorraCard {
-                if data.redemptions.isEmpty {
-                    ChorraEmptyState(title: "No rewards unlocked yet", systemImage: "clock")
-                } else {
-                    ForEach(Array(data.redemptions.enumerated()), id: \.element.id) { index, item in
-                        RewardRedemptionRowView(item: item, showsChild: false)
-
-                        if index < data.redemptions.count - 1 {
-                            ChorraDivider()
-                        }
-                    }
-                }
-            }
         }
     }
 }

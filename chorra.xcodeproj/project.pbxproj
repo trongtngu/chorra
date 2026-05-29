@@ -12,8 +12,8 @@
 
 /* Begin PBXFileReference section */
 		65E520122FC6C69C00F5983B /* chorra.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = chorra.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		65E520232FC6E4D000F5983B /* Supabase.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Supabase.xcconfig; sourceTree = "<group>"; };
-		65E520242FC7047A00F5983B /* Chorra-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Chorra-Info.plist"; sourceTree = "<group>"; };
+		65E520232FC6E4D000F5983B /* Config/Supabase.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Supabase.xcconfig; sourceTree = "<group>"; };
+		65E520242FC7047A00F5983B /* Config/Chorra-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Config/Chorra-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -40,8 +40,8 @@
 			isa = PBXGroup;
 			children = (
 				65E520142FC6C69C00F5983B /* chorra */,
-				65E520232FC6E4D000F5983B /* Supabase.xcconfig */,
-				65E520242FC7047A00F5983B /* Chorra-Info.plist */,
+				65E520232FC6E4D000F5983B /* Config/Supabase.xcconfig */,
+				65E520242FC7047A00F5983B /* Config/Chorra-Info.plist */,
 				65E520132FC6C69C00F5983B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -261,7 +261,7 @@
 		};
 		65E5201E2FC6C69D00F5983B /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 65E520232FC6E4D000F5983B /* Supabase.xcconfig */;
+			baseConfigurationReference = 65E520232FC6E4D000F5983B /* Config/Supabase.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -290,7 +290,7 @@
 		};
 		65E5201F2FC6C69D00F5983B /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 65E520232FC6E4D000F5983B /* Supabase.xcconfig */;
+			baseConfigurationReference = 65E520232FC6E4D000F5983B /* Config/Supabase.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

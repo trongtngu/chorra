@@ -66,7 +66,7 @@ The client should treat Supabase as the source of truth and keep local state lim
 
 Supabase Auth should manage both parent and child sessions.
 
-Parents should have standard authenticated accounts. Children should also have lightweight authenticated sessions so access control can be enforced consistently through Supabase Row Level Security.
+Parents should have standard authenticated accounts. Children should also have lightweight anonymous authenticated sessions so access control can be enforced consistently through Supabase Row Level Security. A single child can have multiple lightweight auth sessions linked at the same time, one per active child device or anonymous session.
 
 The app should distinguish parent and child behavior through profile metadata stored in Postgres, not by relying only on client-side assumptions.
 
@@ -77,7 +77,7 @@ Supabase Postgres should store the core product data:
 - User profiles and role information.
 - Households.
 - Parent membership in a household.
-- Child profiles and their linked auth users.
+- Child profiles and their linked auth sessions.
 - Tasks created by parents.
 - Task assignments to children.
 - Task submissions from children.
@@ -120,7 +120,7 @@ A household represents one family group. It owns the tasks, child profiles, assi
 
 ### Child
 
-A child record belongs to a household and links to a child auth user. It contains child-facing display information and is the owner of assigned tasks and earned points.
+A child record belongs to a household and is the durable child identity for tasks, submissions, and rewards. Child login creates or refreshes a row in `child_auth_sessions`, allowing multiple anonymous auth sessions to point at the same child without replacing another device's access.
 
 ### Task
 
@@ -212,7 +212,7 @@ The MVP includes only the parent-child task and points loop.
 Included:
 
 - Parent account creation.
-- Child account/session support.
+- Child account/session support, including multiple active lightweight sessions for the same child.
 - One household per parent.
 - Add child.
 - Create task.
@@ -251,7 +251,7 @@ Given a new parent, when they create an account, then Chorra creates a parent pr
 
 ### Add Child
 
-Given an authenticated parent, when they add a child, then the child is associated with the parent's household and can have a lightweight login/session.
+Given an authenticated parent, when they add a child, then the child is associated with the parent's household and can have one or more lightweight login sessions.
 
 ### Create Task
 
@@ -283,7 +283,7 @@ The MVP should enforce these access rules through Supabase Row Level Security:
 
 - A parent can read and manage data for their household.
 - A parent cannot access another household.
-- A child can read their own profile.
+- A child can read their own profile from any linked lightweight auth session.
 - A child can read only tasks assigned to them.
 - A child can create submissions only for their own assigned tasks.
 - A child can upload and read only their own task submission photos.

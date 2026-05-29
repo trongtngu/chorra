@@ -798,6 +798,25 @@ private struct TaskFormView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    FormIconToolbar(
+                        saveTitle: task == nil ? "Create" : "Save",
+                        canSave: canSave,
+                        isWorking: appModel.isWorking
+                    ) {
+                        if hasUnsavedChanges {
+                            showingDiscardConfirmation = true
+                        } else {
+                            dismiss()
+                        }
+                    } onSave: {
+                        Task {
+                            await save()
+                            if appModel.errorMessage == nil {
+                                dismiss()
+                            }
+                        }
+                    }
+
                     TextField("Task title", text: $title, axis: .vertical)
                         .font(.largeTitle.weight(.bold))
                         .multilineTextAlignment(.center)
@@ -805,7 +824,6 @@ private struct TaskFormView: View {
                         .textFieldStyle(.plain)
                         .lineLimit(1...3)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 20)
                         .padding(.horizontal, 8)
 
                     RewardColorPickerRow(selectedHex: $cardColorHex)
@@ -856,46 +874,6 @@ private struct TaskFormView: View {
             .scrollContentBackground(.hidden)
             .background(Color.chorraSurface.ignoresSafeArea())
             .tint(.chorraPrimary)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if hasUnsavedChanges {
-                            showingDiscardConfirmation = true
-                        } else {
-                            dismiss()
-                        }
-                    } label: {
-                        Label("Cancel", systemImage: "chevron.left")
-                            .labelStyle(.iconOnly)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.chorraPrimary)
-                    }
-                    .accessibilityLabel("Cancel")
-                    .tint(.chorraPrimary)
-                    .buttonStyle(.plain)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task {
-                            await save()
-                            if appModel.errorMessage == nil {
-                                dismiss()
-                            }
-                        }
-                    } label: {
-                        Label("Save", systemImage: "checkmark")
-                            .labelStyle(.iconOnly)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.chorraPrimary)
-                    }
-                    .tint(.chorraPrimary)
-                    .buttonStyle(.plain)
-                    .disabled(appModel.isWorking || !canSave)
-                }
-            }
         }
         .overlay {
             if showingPointValueDialog {
@@ -1056,6 +1034,48 @@ private struct AssignTaskView: View {
     }
 }
 
+private struct FormIconToolbar: View {
+    let saveTitle: String
+    let canSave: Bool
+    let isWorking: Bool
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: onCancel) {
+                Label("Back", systemImage: "chevron.left")
+                    .labelStyle(.iconOnly)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.chorraPrimary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            Button(action: onSave) {
+                Text(saveTitle)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(saveColor)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking || !canSave)
+            .accessibilityLabel(saveTitle)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 20)
+    }
+
+    private var saveColor: Color {
+        isWorking || !canSave ? .chorraTextMuted : .chorraPrimary
+    }
+}
+
 private struct RewardFormView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appModel: AppViewModel
@@ -1099,6 +1119,25 @@ private struct RewardFormView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    FormIconToolbar(
+                        saveTitle: reward == nil ? "Create" : "Save",
+                        canSave: canSave,
+                        isWorking: appModel.isWorking
+                    ) {
+                        if hasUnsavedChanges {
+                            showingDiscardConfirmation = true
+                        } else {
+                            dismiss()
+                        }
+                    } onSave: {
+                        Task {
+                            await save()
+                            if appModel.errorMessage == nil {
+                                dismiss()
+                            }
+                        }
+                    }
+
                     TextField("Reward name", text: $name, axis: .vertical)
                         .font(.largeTitle.weight(.bold))
                         .multilineTextAlignment(.center)
@@ -1106,7 +1145,6 @@ private struct RewardFormView: View {
                         .textFieldStyle(.plain)
                         .lineLimit(1...3)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 20)
                         .padding(.horizontal, 8)
 
                     RewardColorPickerRow(selectedHex: $cardColorHex)
@@ -1157,46 +1195,6 @@ private struct RewardFormView: View {
             .scrollContentBackground(.hidden)
             .background(Color.chorraSoftSurface.ignoresSafeArea())
             .tint(.chorraPrimary)
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        if hasUnsavedChanges {
-                            showingDiscardConfirmation = true
-                        } else {
-                            dismiss()
-                        }
-                    } label: {
-                        Label("Cancel", systemImage: "chevron.left")
-                            .labelStyle(.iconOnly)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.chorraPrimary)
-                    }
-                    .accessibilityLabel("Cancel")
-                    .tint(.chorraPrimary)
-                    .buttonStyle(.plain)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        Task {
-                            await save()
-                            if appModel.errorMessage == nil {
-                                dismiss()
-                            }
-                        }
-                    } label: {
-                        Label("Save", systemImage: "checkmark")
-                            .labelStyle(.iconOnly)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(Color.chorraPrimary)
-                    }
-                    .tint(.chorraPrimary)
-                    .buttonStyle(.plain)
-                    .disabled(appModel.isWorking || !canSave)
-                }
-            }
         }
         .overlay {
             if showingPointCostDialog {

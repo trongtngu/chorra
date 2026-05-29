@@ -262,6 +262,8 @@ private struct ParentTasksTab: View {
     let data: ParentDashboardData
     let onCreateTask: () -> Void
 
+    @State private var reviewingTask: ParentTaskItem?
+
     var body: some View {
         ParentTabContainer(title: "Tasks") {
             ChorraSectionHeader(
@@ -282,11 +284,21 @@ private struct ParentTasksTab: View {
                 }
             } else {
                 ForEach(data.taskItems) { item in
-                    ChorraCard {
-                        ParentTaskRowView(item: item)
+                    if item.isAwaitingReview {
+                        Button {
+                            reviewingTask = item
+                        } label: {
+                            ParentTaskCardView(item: item)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        ParentTaskCardView(item: item)
                     }
                 }
             }
+        }
+        .sheet(item: $reviewingTask) { item in
+            ParentTaskReviewSheet(item: item)
         }
     }
 }
@@ -323,34 +335,29 @@ private struct ParentRewardsTab: View {
                 }
             }
 
-            ChorraSectionHeader(title: "Reward history")
-
-            ChorraCard {
-                if data.redemptions.isEmpty {
-                    ChorraEmptyState(title: "No rewards unlocked yet", systemImage: "clock")
-                } else {
-                    ForEach(Array(data.redemptions.enumerated()), id: \.element.id) { index, item in
-                        RewardRedemptionRowView(item: item, showsChild: true)
-
-                        if index < data.redemptions.count - 1 {
-                            ChorraDivider()
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
-private struct ParentTaskRowView: View {
-    @EnvironmentObject private var appModel: AppViewModel
+private struct ParentTaskCardView: View {
     let item: ParentTaskItem
-
-    @State private var rejectionReason = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 8) {
+                ChildAvatarView(child: item.child, size: 28)
+
+                Text(childName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                ChorraPill(title: item.task.status.label, color: statusColor)
+            }
+
+            HStack(spacing: 12) {
                 ChorraIconView(
                     iconName: item.task.iconName,
                     size: 46,
@@ -358,86 +365,44 @@ private struct ParentTaskRowView: View {
                     padding: 7
                 )
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(item.task.title)
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(Color.chorraTextPrimary)
+                        .lineLimit(2)
 
-                    if let description = item.task.description, !description.isEmpty {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(Color.chorraTextSecondary)
-                    }
+                    ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
 
-                    HStack(spacing: 4) {
-                        Text(childName)
-                        Text("·")
-                        ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 11)
-                    }
-                        .font(.caption)
-                        .foregroundStyle(Color.chorraTextSecondary)
-                }
-
-                Spacer()
-
-                ChorraPill(title: item.task.status.label, color: statusColor)
-            }
-
-            if let url = item.signedImageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                            .frame(maxWidth: .infinity, minHeight: 180)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    case .failure:
-                        Text("Photo unavailable")
-                            .font(.subheadline)
-                            .foregroundStyle(Color.chorraTextSecondary)
-                    @unknown default:
-                        EmptyView()
+                    if let rejectionText {
+                        Text(rejectionText)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.chorraError)
+                            .lineLimit(2)
                     }
                 }
-            }
-
-            if let submission = item.latestSubmission, submission.status == .submitted {
-                TextField("Reason if rejecting", text: $rejectionReason)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Button("Approve") {
-                        Task { await appModel.approveSubmission(submission) }
-                    }
-                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraSuccess))
-                    .disabled(appModel.isWorking)
-
-                    Button("Reject") {
-                        Task {
-                            await appModel.rejectSubmission(
-                                submission,
-                                reason: rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines)
-                            )
-                        }
-                    }
-                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
-                    .disabled(appModel.isWorking)
-                }
-            } else if let submission = item.latestSubmission, submission.status == .rejected {
-                Text(submission.rejectionReason ?? "Rejected for resubmission")
-                    .font(.caption)
-                    .foregroundStyle(Color.chorraTextSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PastelCardColor.color(from: item.task.cardColorHex))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var childName: String {
         item.child?.displayName ?? "Unassigned"
+    }
+
+    private var rejectionText: String? {
+        guard let submission = item.latestSubmission, submission.status == .rejected else {
+            return nil
+        }
+
+        return submission.rejectionReason ?? "Needs more work"
     }
 
     private var statusColor: Color {
@@ -453,6 +418,168 @@ private struct ParentTaskRowView: View {
         case .completed:
             return .chorraSuccess
         }
+    }
+}
+
+private struct ParentTaskReviewSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appModel: AppViewModel
+
+    let item: ParentTaskItem
+
+    @State private var rejectionReason = ""
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ParentTaskCardView(item: item)
+
+                    ChorraCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Photo proof")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(Color.chorraTextPrimary)
+
+                            proofImage
+                        }
+                    }
+
+                    ChorraCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Review")
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(Color.chorraTextPrimary)
+
+                            TextField("Reason if rejecting", text: $rejectionReason, axis: .vertical)
+                                .textFieldStyle(.roundedBorder)
+
+                            HStack(spacing: 12) {
+                                Button("Approve") {
+                                    approve()
+                                }
+                                .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraSuccess))
+                                .disabled(appModel.isWorking || submission == nil)
+
+                                Button("Reject") {
+                                    reject()
+                                }
+                                .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
+                                .disabled(appModel.isWorking || submission == nil)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .background(Color.chorraSurface)
+            .navigationTitle("Review task")
+            .navigationBarTitleDisplayMode(.inline)
+            .chorraNavigationBar()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .tint(.chorraSurface)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var proofImage: some View {
+        if let url = item.signedImageURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 300)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                case .failure:
+                    Text("Photo unavailable")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.chorraTextSecondary)
+                        .frame(maxWidth: .infinity, minHeight: 120)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        } else {
+            ChorraEmptyState(title: "Photo unavailable", systemImage: "photo")
+        }
+    }
+
+    private var submission: TaskSubmission? {
+        guard let submission = item.latestSubmission, submission.status == .submitted else {
+            return nil
+        }
+
+        return submission
+    }
+
+    private func approve() {
+        guard let submission else {
+            return
+        }
+
+        Task {
+            await appModel.approveSubmission(submission)
+            if appModel.errorMessage == nil {
+                dismiss()
+            }
+        }
+    }
+
+    private func reject() {
+        guard let submission else {
+            return
+        }
+
+        Task {
+            await appModel.rejectSubmission(
+                submission,
+                reason: rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            if appModel.errorMessage == nil {
+                dismiss()
+            }
+        }
+    }
+}
+
+private struct ChildAvatarView: View {
+    let child: Child?
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.chorraSurface.opacity(0.72))
+
+            Text(initial)
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(Color.chorraPrimary)
+        }
+        .frame(width: size, height: size)
+    }
+
+    private var initial: String {
+        guard let child else {
+            return "?"
+        }
+
+        return String(child.displayName.prefix(1)).uppercased()
+    }
+}
+
+private extension ParentTaskItem {
+    var isAwaitingReview: Bool {
+        latestSubmission?.status == .submitted
     }
 }
 
@@ -495,37 +622,6 @@ private struct ParentRewardCardView: View {
         }
         .buttonStyle(.plain)
         .disabled(appModel.isWorking)
-    }
-}
-
-struct RewardRedemptionRowView: View {
-    let item: RewardRedemptionItem
-    let showsChild: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ChorraIconView(iconName: item.redemption.rewardIconName, size: 36, padding: 6)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.redemption.rewardName)
-                    .font(.headline)
-                    .foregroundStyle(Color.chorraTextPrimary)
-
-                if showsChild, let child = item.child {
-                    Text(child.displayName)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.chorraTextSecondary)
-                }
-
-                HStack {
-                    ChorraPointAmountLabel(amount: -item.redemption.rewardPointCost, iconSize: 11)
-                    Text(item.redemption.redeemedAt)
-                }
-                .font(.caption)
-                .foregroundStyle(Color.chorraTextSecondary)
-            }
-        }
-        .padding(.vertical, 2)
     }
 }
 

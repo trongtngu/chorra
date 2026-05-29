@@ -20,9 +20,7 @@ struct AppShellView: View {
                     }
             }
         }
-        .tint(.chorraPrimary)
-        .toolbarBackground(Color.chorraSurface, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
+        .chorraTabBar()
         .background(Color.chorraBackground)
     }
 

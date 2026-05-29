@@ -19,12 +19,12 @@ struct ContentView: View {
             .overlay {
                 if appModel.isWorking {
                     ZStack {
-                        Color.black.opacity(0.12)
+                        Color.chorraPrimaryDark.opacity(0.24)
                             .ignoresSafeArea()
 
                         ProgressView()
                             .padding(20)
-                            .background(.regularMaterial)
+                            .background(Color.chorraSurface)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
@@ -57,7 +57,12 @@ private struct RootView: View {
             if let configurationError = appModel.configurationError {
                 ConfigurationErrorView(message: configurationError)
             } else if appModel.isLoading {
-                ProgressView()
+                ChorraScreen(title: "Chorra") {
+                    ProgressView()
+                        .tint(.chorraPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 120)
+                }
             } else {
                 switch appModel.session {
                 case .signedOut:
@@ -77,24 +82,24 @@ private struct ConfigurationErrorView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(Color.chorraWarning)
+            ChorraScreen(title: "Configuration") {
+                ChorraCard {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.largeTitle)
+                        .foregroundStyle(Color.chorraWarning)
 
-                Text("Supabase is not configured")
-                    .font(.title2.weight(.bold))
+                    Text("Supabase is not configured")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
 
-                Text(message)
-                    .foregroundStyle(.secondary)
+                    Text(message)
+                        .foregroundStyle(Color.chorraTextSecondary)
 
-                Text("Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in the target build settings or launch environment.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Text("Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in the target build settings or launch environment.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.chorraTextSecondary)
+                }
             }
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .navigationTitle("Configuration")
         }
     }
 }

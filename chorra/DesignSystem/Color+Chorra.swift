@@ -8,18 +8,18 @@
 import SwiftUI
 
 extension Color {
-    static let chorraPrimary = Color(hex: 0x6D4CFF)
-    static let chorraPrimaryDark = Color(hex: 0x4B2FD6)
-    static let chorraPrimarySoft = Color(hex: 0xEDE9FF)
+    static let chorraPrimary = Color(hex: 0x30384E)
+    static let chorraPrimaryDark = Color(hex: 0x252C3E)
+    static let chorraPrimarySoft = Color(hex: 0xEEF1F6)
 
-    static let chorraBackground = Color(hex: 0xFCFBFF)
+    static let chorraBackground = Color(hex: 0x30384E)
     static let chorraSurface = Color(hex: 0xFFFFFF)
-    static let chorraSoftSurface = Color(hex: 0xF5F2FF)
-    static let chorraBorder = Color(hex: 0xDED7FF)
+    static let chorraSoftSurface = Color(hex: 0xF5F7FA)
+    static let chorraBorder = Color(hex: 0xDCE2EA)
 
-    static let chorraTextPrimary = Color(hex: 0x1D1733)
-    static let chorraTextSecondary = Color(hex: 0x6D6780)
-    static let chorraTextMuted = Color(hex: 0xA8A1BA)
+    static let chorraTextPrimary = Color(hex: 0x30384E)
+    static let chorraTextSecondary = Color(hex: 0x728097)
+    static let chorraTextMuted = Color(hex: 0xA8B1C0)
 
     static let chorraSuccess = Color(hex: 0x34A853)
     static let chorraWarning = Color(hex: 0xF5A524)

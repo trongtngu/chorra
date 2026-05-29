@@ -13,162 +13,330 @@ struct ParentDashboardView: View {
     @EnvironmentObject private var appModel: AppViewModel
     let data: ParentDashboardData
 
+    @State private var selectedTab: ParentDashboardTab = .home
     @State private var showingAddChild = false
     @State private var showingCreateTask = false
     @State private var showingCreateReward = false
     @State private var editingReward: RewardItem?
 
     var body: some View {
-        NavigationStack {
-            List {
-                householdSection
-                childrenSection
-                tasksSection
-                rewardsSection
-                redemptionsSection
-            }
-            .navigationTitle("Parent")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Refresh") {
-                        Task { await appModel.refresh() }
-                    }
-                    .disabled(appModel.isWorking)
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Sign out") {
-                        Task { await appModel.signOut() }
-                    }
-                    .disabled(appModel.isWorking)
-                }
-            }
-            .sheet(isPresented: $showingAddChild) {
-                AddChildView()
-                    .environmentObject(appModel)
-            }
-            .sheet(isPresented: $showingCreateTask) {
-                CreateTaskView(children: data.children)
-                    .environmentObject(appModel)
-            }
-            .sheet(isPresented: $showingCreateReward) {
-                RewardFormView(item: nil)
-                    .environmentObject(appModel)
-            }
-            .sheet(item: $editingReward) { item in
-                RewardFormView(item: item)
-                    .environmentObject(appModel)
-            }
-        }
-    }
-
-    private var householdSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(data.household.name)
-                    .font(.headline)
-
-                HStack {
-                    Text("Child code")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text(data.household.loginCode)
-                        .font(.system(.body, design: .monospaced).weight(.semibold))
-                }
-            }
-            .padding(.vertical, 4)
-        }
-    }
-
-    private var childrenSection: some View {
-        Section {
-            if data.children.isEmpty {
-                Text("No children yet")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(data.children) { child in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(child.displayName)
-                            Text("@\(child.loginName)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(points(for: child)) pts")
-                            .font(.headline)
-                    }
-                }
-            }
-
-            Button("Add child") {
+        TabView(selection: $selectedTab) {
+            ParentHomeTab(data: data) {
                 showingAddChild = true
             }
-        } header: {
-            Text("Children")
-        }
-    }
-
-    private var tasksSection: some View {
-        Section {
-            if data.taskItems.isEmpty {
-                Text("No tasks yet")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(data.taskItems) { item in
-                    ParentTaskRowView(item: item)
-                        .environmentObject(appModel)
-                }
+            .tag(ParentDashboardTab.home)
+            .tabItem {
+                Label(ParentDashboardTab.home.title, systemImage: ParentDashboardTab.home.systemImage)
             }
 
-            Button("Create task") {
+            ParentTasksTab(data: data) {
                 showingCreateTask = true
             }
-            .disabled(data.children.isEmpty)
-        } header: {
-            Text("Tasks")
-        }
-    }
-
-    private var rewardsSection: some View {
-        Section {
-            if data.rewards.isEmpty {
-                Text("No rewards yet")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(data.rewards) { item in
-                    ParentRewardRowView(item: item) {
-                        editingReward = item
-                    }
-                    .environmentObject(appModel)
-                }
+            .environmentObject(appModel)
+            .tag(ParentDashboardTab.tasks)
+            .tabItem {
+                Label(ParentDashboardTab.tasks.title, systemImage: ParentDashboardTab.tasks.systemImage)
             }
 
-            Button("Create reward") {
+            ParentRewardsTab(data: data) {
                 showingCreateReward = true
+            } onEditReward: { item in
+                editingReward = item
             }
-        } header: {
-            Text("Rewards")
+            .environmentObject(appModel)
+            .tag(ParentDashboardTab.rewards)
+            .tabItem {
+                Label(ParentDashboardTab.rewards.title, systemImage: ParentDashboardTab.rewards.systemImage)
+            }
+        }
+        .chorraTabBar()
+        .background(Color.chorraBackground)
+        .sheet(isPresented: $showingAddChild) {
+            AddChildView()
+                .environmentObject(appModel)
+        }
+        .sheet(isPresented: $showingCreateTask) {
+            CreateTaskView(children: data.children)
+                .environmentObject(appModel)
+        }
+        .sheet(isPresented: $showingCreateReward) {
+            RewardFormView(item: nil)
+                .environmentObject(appModel)
+        }
+        .sheet(item: $editingReward) { item in
+            RewardFormView(item: item)
+                .environmentObject(appModel)
+        }
+    }
+}
+
+private enum ParentDashboardTab: Hashable, CaseIterable {
+    case home
+    case tasks
+    case rewards
+
+    var title: String {
+        switch self {
+        case .home:
+            return "Home"
+        case .tasks:
+            return "Tasks"
+        case .rewards:
+            return "Rewards"
         }
     }
 
-    private var redemptionsSection: some View {
-        Section {
-            if data.redemptions.isEmpty {
-                Text("No rewards redeemed yet")
-                    .foregroundStyle(.secondary)
+    var systemImage: String {
+        switch self {
+        case .home:
+            return "house.fill"
+        case .tasks:
+            return "checklist"
+        case .rewards:
+            return "gift.fill"
+        }
+    }
+}
+
+private struct ParentTabContainer<Content: View>: View {
+    @EnvironmentObject private var appModel: AppViewModel
+
+    let title: String
+    let content: Content
+
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ChorraScreen(title: title) {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await appModel.refresh() }
+                    } label: {
+                        ChorraToolbarIcon(systemImage: "arrow.clockwise")
+                    }
+                    .accessibilityLabel("Refresh")
+                    .disabled(appModel.isWorking)
+
+                    Button {
+                        Task { await appModel.signOut() }
+                    } label: {
+                        ChorraToolbarIcon(systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                    .accessibilityLabel("Sign out")
+                    .disabled(appModel.isWorking)
+                }
+            } content: {
+                content
+            }
+        }
+    }
+}
+
+private struct ParentHomeTab: View {
+    let data: ParentDashboardData
+    let onAddChild: () -> Void
+
+    var body: some View {
+        ParentTabContainer(title: "Home") {
+            householdCard
+
+            ChorraSectionHeader(
+                title: "Children",
+                actionTitle: "Add",
+                systemImage: "person.badge.plus",
+                action: onAddChild
+            )
+
+            if data.children.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "No children yet", systemImage: "person.2")
+                }
             } else {
-                ForEach(data.redemptions) { item in
-                    RewardRedemptionRowView(item: item, showsChild: true)
+                ChorraCard {
+                    ForEach(Array(data.children.enumerated()), id: \.element.id) { index, child in
+                        ChildSummaryRow(child: child, points: points(for: child))
+
+                        if index < data.children.count - 1 {
+                            ChorraDivider()
+                        }
+                    }
                 }
             }
-        } header: {
-            Text("Reward history")
         }
+    }
+
+    private var householdCard: some View {
+        ChorraCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(data.household.name)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+
+                Text(data.profile.displayName)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.chorraTextSecondary)
+            }
+
+            HStack(spacing: 10) {
+                ChorraStatPill(
+                    title: "children",
+                    value: "\(data.children.count)",
+                    systemImage: "person.2.fill"
+                )
+
+                ChorraStatPill(
+                    title: "points",
+                    value: "\(totalPoints)",
+                    systemImage: "star.fill"
+                )
+            }
+
+            ChorraDivider()
+
+            HStack {
+                Label("Child code", systemImage: "key.fill")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.chorraTextSecondary)
+
+                Spacer()
+
+                Text(data.household.loginCode)
+                    .font(.system(.headline, design: .monospaced).weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.chorraPrimarySoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+    }
+
+    private var totalPoints: Int {
+        data.balances.reduce(0) { $0 + $1.points }
     }
 
     private func points(for child: Child) -> Int {
         data.balances.first(where: { $0.childId == child.id })?.points ?? 0
+    }
+}
+
+private struct ChildSummaryRow: View {
+    let child: Child
+    let points: Int
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.chorraPrimarySoft)
+
+                Text(String(child.displayName.prefix(1)).uppercased())
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.chorraPrimary)
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(child.displayName)
+                    .font(.headline)
+                    .foregroundStyle(Color.chorraTextPrimary)
+
+                Text("@\(child.loginName)")
+                    .font(.caption)
+                    .foregroundStyle(Color.chorraTextSecondary)
+            }
+
+            Spacer()
+
+            Text("\(points) pts")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(Color.chorraPrimary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+private struct ParentTasksTab: View {
+    let data: ParentDashboardData
+    let onCreateTask: () -> Void
+
+    var body: some View {
+        ParentTabContainer(title: "Tasks") {
+            ChorraSectionHeader(
+                title: "Tasks",
+                actionTitle: "Create",
+                systemImage: "plus",
+                isDisabled: data.children.isEmpty,
+                action: onCreateTask
+            )
+
+            if data.children.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "Add a child before creating tasks", systemImage: "person.badge.plus")
+                }
+            } else if data.taskItems.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "No tasks yet", systemImage: "checklist")
+                }
+            } else {
+                ForEach(data.taskItems) { item in
+                    ChorraCard {
+                        ParentTaskRowView(item: item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ParentRewardsTab: View {
+    let data: ParentDashboardData
+    let onCreateReward: () -> Void
+    let onEditReward: (RewardItem) -> Void
+
+    var body: some View {
+        ParentTabContainer(title: "Rewards") {
+            ChorraSectionHeader(
+                title: "Rewards",
+                actionTitle: "Create",
+                systemImage: "plus",
+                action: onCreateReward
+            )
+
+            if data.rewards.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "No rewards yet", systemImage: "gift")
+                }
+            } else {
+                ForEach(data.rewards) { item in
+                    ChorraCard {
+                        ParentRewardRowView(item: item) {
+                            onEditReward(item)
+                        }
+                    }
+                }
+            }
+
+            ChorraSectionHeader(title: "Reward history")
+
+            ChorraCard {
+                if data.redemptions.isEmpty {
+                    ChorraEmptyState(title: "No rewards redeemed yet", systemImage: "clock")
+                } else {
+                    ForEach(Array(data.redemptions.enumerated()), id: \.element.id) { index, item in
+                        RewardRedemptionRowView(item: item, showsChild: true)
+
+                        if index < data.redemptions.count - 1 {
+                            ChorraDivider()
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -180,31 +348,26 @@ private struct ParentTaskRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(item.task.title)
                         .font(.headline)
+                        .foregroundStyle(Color.chorraTextPrimary)
 
                     if let description = item.task.description, !description.isEmpty {
                         Text(description)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.chorraTextSecondary)
                     }
 
-                    Text(taskMeta)
+                    Label(taskMeta, systemImage: "star.fill")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.chorraTextSecondary)
                 }
 
                 Spacer()
 
-                Text(item.task.status.label)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.14))
-                    .foregroundStyle(statusColor)
-                    .clipShape(Capsule())
+                ChorraPill(title: item.task.status.label, color: statusColor)
             }
 
             if let url = item.signedImageURL {
@@ -219,10 +382,11 @@ private struct ParentTaskRowView: View {
                             .scaledToFill()
                             .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
                             .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     case .failure:
                         Text("Photo unavailable")
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(Color.chorraTextSecondary)
                     @unknown default:
                         EmptyView()
                     }
@@ -237,8 +401,7 @@ private struct ParentTaskRowView: View {
                     Button("Approve") {
                         Task { await appModel.approveSubmission(submission) }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.chorraSuccess)
+                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraSuccess))
                     .disabled(appModel.isWorking)
 
                     Button("Reject") {
@@ -249,17 +412,15 @@ private struct ParentTaskRowView: View {
                             )
                         }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.chorraError)
+                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
                     .disabled(appModel.isWorking)
                 }
             } else if let submission = item.latestSubmission, submission.status == .rejected {
                 Text(submission.rejectionReason ?? "Rejected for resubmission")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.chorraTextSecondary)
             }
         }
-        .padding(.vertical, 8)
     }
 
     private var taskMeta: String {
@@ -292,14 +453,15 @@ private struct ParentRewardRowView: View {
         HStack(alignment: .top, spacing: 12) {
             RewardThumbnailView(url: item.signedImageURL, size: 64)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 7) {
                 Text(item.reward.name)
                     .font(.headline)
+                    .foregroundStyle(Color.chorraTextPrimary)
 
                 if let description = item.reward.description, !description.isEmpty {
                     Text(description)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.chorraTextSecondary)
                 }
 
                 Text("\(item.reward.pointCost) pts")
@@ -310,19 +472,18 @@ private struct ParentRewardRowView: View {
                     Button("Edit") {
                         onEdit()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(ChorraSecondaryButtonStyle())
                     .disabled(appModel.isWorking)
 
                     Button("Archive") {
                         Task { await appModel.archiveReward(item.reward) }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.chorraError)
+                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
                     .disabled(appModel.isWorking)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 6)
     }
 }
 
@@ -337,11 +498,12 @@ struct RewardRedemptionRowView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.redemption.rewardName)
                     .font(.headline)
+                    .foregroundStyle(Color.chorraTextPrimary)
 
                 if showsChild, let child = item.child {
                     Text(child.displayName)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.chorraTextSecondary)
                 }
 
                 HStack {
@@ -349,10 +511,10 @@ struct RewardRedemptionRowView: View {
                     Text(item.redemption.redeemedAt)
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.chorraTextSecondary)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
 }
 
@@ -383,7 +545,7 @@ struct RewardThumbnailView: View {
         }
         .frame(width: size, height: size)
         .background(Color.chorraSoftSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .clipped()
     }
 
@@ -413,10 +575,13 @@ private struct AddChildView: View {
                         .keyboardType(.numberPad)
                 }
             }
+            .chorraFormBackground()
             .navigationTitle("Add child")
+            .chorraNavigationBar()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .tint(.chorraSurface)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -432,6 +597,7 @@ private struct AddChildView: View {
                             }
                         }
                     }
+                    .tint(.chorraSurface)
                     .disabled(appModel.isWorking || !canSave)
                 }
             }
@@ -476,13 +642,16 @@ private struct CreateTaskView: View {
                     }
                 }
             }
+            .chorraFormBackground()
             .navigationTitle("Create task")
+            .chorraNavigationBar()
             .onAppear {
                 selectedChildId = selectedChildId ?? children.first?.id
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .tint(.chorraSurface)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -503,6 +672,7 @@ private struct CreateTaskView: View {
                             }
                         }
                     }
+                    .tint(.chorraSurface)
                     .disabled(appModel.isWorking || !canSave)
                 }
             }
@@ -558,7 +728,7 @@ private struct RewardFormView: View {
                             .scaledToFill()
                             .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
                             .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     } else if !imageRemoved, let existingImageURL {
                         AsyncImage(url: existingImageURL) { phase in
                             switch phase {
@@ -571,10 +741,10 @@ private struct RewardFormView: View {
                                     .scaledToFill()
                                     .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
                                     .clipped()
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             case .failure:
                                 Text("Image unavailable")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.chorraTextSecondary)
                             @unknown default:
                                 EmptyView()
                             }
@@ -591,7 +761,9 @@ private struct RewardFormView: View {
                     }
                 }
             }
+            .chorraFormBackground()
             .navigationTitle(reward == nil ? "Create reward" : "Edit reward")
+            .chorraNavigationBar()
             .onChange(of: selectedPhotoItem) { _, newItem in
                 Task {
                     await loadPhoto(from: newItem)
@@ -600,6 +772,7 @@ private struct RewardFormView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .tint(.chorraSurface)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -611,6 +784,7 @@ private struct RewardFormView: View {
                             }
                         }
                     }
+                    .tint(.chorraSurface)
                     .disabled(appModel.isWorking || !canSave)
                 }
             }
@@ -665,29 +839,130 @@ private struct RewardFormView: View {
     }
 }
 
-#Preview {
-    ParentDashboardView(data: ParentDashboardData(
-        profile: Profile(
+#Preview("Parent Home") {
+    ParentDashboardView(data: .preview)
+        .environmentObject(AppViewModel())
+}
+
+#Preview("Parent Tasks") {
+    ParentTasksTab(data: .preview) {}
+        .environmentObject(AppViewModel())
+}
+
+#Preview("Parent Rewards") {
+    ParentRewardsTab(data: .preview) {} onEditReward: { _ in }
+        .environmentObject(AppViewModel())
+}
+
+private extension ParentDashboardData {
+    static var preview: ParentDashboardData {
+        let householdId = UUID()
+        let parentId = UUID()
+        let child = Child(
             id: UUID(),
-            householdId: UUID(),
-            role: .parent,
-            displayName: "Parent",
-            createdAt: "",
-            updatedAt: ""
-        ),
-        household: Household(
+            householdId: householdId,
+            authUserId: UUID(),
+            displayName: "Ava",
+            loginName: "ava",
+            createdBy: parentId,
+            createdAt: "2026-05-29",
+            updatedAt: "2026-05-29"
+        )
+        let task = ChorraTask(
             id: UUID(),
-            name: "Nguyen Household",
-            loginCode: "ABC12345",
-            createdBy: UUID(),
-            createdAt: "",
-            updatedAt: ""
-        ),
-        children: [],
-        balances: [],
-        taskItems: [],
-        rewards: [],
-        redemptions: []
-    ))
-    .environmentObject(AppViewModel())
+            householdId: householdId,
+            createdBy: parentId,
+            title: "Pack school bag",
+            description: "Put lunchbox, reader, and hat in your bag.",
+            pointValue: 8,
+            status: .submitted,
+            createdAt: "2026-05-29",
+            updatedAt: "2026-05-29"
+        )
+        let assignment = TaskAssignment(
+            id: UUID(),
+            householdId: householdId,
+            taskId: task.id,
+            childId: child.id,
+            assignedBy: parentId,
+            assignedAt: "2026-05-29"
+        )
+        let submission = TaskSubmission(
+            id: UUID(),
+            householdId: householdId,
+            assignmentId: assignment.id,
+            childId: child.id,
+            submittedBy: child.id,
+            status: .submitted,
+            rejectionReason: nil,
+            reviewedBy: nil,
+            reviewedAt: nil,
+            createdAt: "2026-05-29",
+            updatedAt: "2026-05-29"
+        )
+        let reward = Reward(
+            id: UUID(),
+            householdId: householdId,
+            createdBy: parentId,
+            name: "Movie night",
+            description: "Choose the family movie.",
+            pointCost: 30,
+            imageStoragePath: nil,
+            isArchived: false,
+            createdAt: "2026-05-29",
+            updatedAt: "2026-05-29"
+        )
+        let redemption = RewardRedemption(
+            id: UUID(),
+            householdId: householdId,
+            childId: child.id,
+            rewardId: reward.id,
+            redeemedBy: child.id,
+            rewardName: reward.name,
+            rewardDescription: reward.description,
+            rewardPointCost: reward.pointCost,
+            rewardImageStoragePath: nil,
+            redeemedAt: "2026-05-29"
+        )
+
+        return ParentDashboardData(
+            profile: Profile(
+                id: parentId,
+                householdId: householdId,
+                role: .parent,
+                displayName: "Tommy",
+                createdAt: "2026-05-29",
+                updatedAt: "2026-05-29"
+            ),
+            household: Household(
+                id: householdId,
+                name: "Nguyen Household",
+                loginCode: "ABC12345",
+                createdBy: parentId,
+                createdAt: "2026-05-29",
+                updatedAt: "2026-05-29"
+            ),
+            children: [child],
+            balances: [
+                ChildPointsBalance(
+                    childId: child.id,
+                    householdId: householdId,
+                    points: 18,
+                    lastEarnedAt: "2026-05-29"
+                )
+            ],
+            taskItems: [
+                ParentTaskItem(
+                    task: task,
+                    assignment: assignment,
+                    child: child,
+                    latestSubmission: submission,
+                    image: nil,
+                    signedImageURL: nil
+                )
+            ],
+            rewards: [RewardItem(reward: reward, signedImageURL: nil)],
+            redemptions: [RewardRedemptionItem(redemption: redemption, child: child, signedImageURL: nil)]
+        )
+    }
 }

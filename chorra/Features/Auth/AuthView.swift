@@ -23,13 +23,20 @@ struct AuthView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
+            ChorraScreen(title: "Chorra") {
+                ChorraCard {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Tasks, points, and rewards for the household.")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.chorraTextSecondary)
+                    }
+
                     Picker("Mode", selection: $authMode) {
                         Text("Parent").tag(AuthMode.parent)
                         Text("Child").tag(AuthMode.child)
                     }
                     .pickerStyle(.segmented)
+                    .tint(.chorraPrimary)
                 }
 
                 switch authMode {
@@ -39,83 +46,96 @@ struct AuthView: View {
                     childSection
                 }
             }
-            .navigationTitle("Chorra")
         }
     }
 
     private var parentSection: some View {
-        Group {
-            Section {
-                Picker("Parent mode", selection: $parentMode) {
-                    Text("Sign in").tag(ParentAuthMode.signIn)
-                    Text("Create account").tag(ParentAuthMode.signUp)
-                }
-                .pickerStyle(.segmented)
+        ChorraCard {
+            Picker("Parent mode", selection: $parentMode) {
+                Text("Sign in").tag(ParentAuthMode.signIn)
+                Text("Create account").tag(ParentAuthMode.signUp)
             }
+            .pickerStyle(.segmented)
+            .tint(.chorraPrimary)
 
-            Section("Parent account") {
+            VStack(spacing: 10) {
                 TextField("Email", text: $email)
                     .textContentType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .keyboardType(.emailAddress)
+                    .chorraInput()
 
                 SecureField("Password", text: $password)
                     .textContentType(parentMode == .signIn ? .password : .newPassword)
+                    .chorraInput()
 
                 if parentMode == .signUp {
                     TextField("Your name", text: $displayName)
                         .textContentType(.name)
+                        .chorraInput()
 
                     TextField("Household name", text: $householdName)
+                        .chorraInput()
                 }
             }
 
-            Section {
-                Button(parentMode == .signIn ? "Sign in" : "Create parent account") {
-                    Task {
-                        switch parentMode {
-                        case .signIn:
-                            await appModel.signInParent(email: email, password: password)
-                        case .signUp:
-                            await appModel.signUpParent(
-                                email: email,
-                                password: password,
-                                displayName: displayName,
-                                householdName: householdName
-                            )
-                        }
+            Button(parentMode == .signIn ? "Sign in" : "Create parent account") {
+                Task {
+                    switch parentMode {
+                    case .signIn:
+                        await appModel.signInParent(email: email, password: password)
+                    case .signUp:
+                        await appModel.signUpParent(
+                            email: email,
+                            password: password,
+                            displayName: displayName,
+                            householdName: householdName
+                        )
                     }
                 }
-                .disabled(appModel.isWorking || !canSubmitParent)
             }
+            .buttonStyle(ChorraPrimaryButtonStyle())
+            .disabled(appModel.isWorking || !canSubmitParent)
         }
     }
 
     private var childSection: some View {
-        Group {
-            Section("Child login") {
+        ChorraCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Child login")
+                    .font(.headline)
+                    .foregroundStyle(Color.chorraTextPrimary)
+
+                Text("Use the household code and PIN from your parent.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.chorraTextSecondary)
+            }
+
+            VStack(spacing: 10) {
                 TextField("Household code", text: $householdCode)
                     .textInputAutocapitalization(.characters)
+                    .chorraInput()
 
                 TextField("Child login name", text: $childLoginName)
                     .textInputAutocapitalization(.never)
+                    .chorraInput()
 
                 SecureField("PIN", text: $childPIN)
                     .keyboardType(.numberPad)
+                    .chorraInput()
             }
 
-            Section {
-                Button("Continue as child") {
-                    Task {
-                        await appModel.claimChildSession(
-                            householdCode: householdCode,
-                            loginName: childLoginName,
-                            pin: childPIN
-                        )
-                    }
+            Button("Continue as child") {
+                Task {
+                    await appModel.claimChildSession(
+                        householdCode: householdCode,
+                        loginName: childLoginName,
+                        pin: childPIN
+                    )
                 }
-                .disabled(appModel.isWorking || !canSubmitChild)
             }
+            .buttonStyle(ChorraPrimaryButtonStyle())
+            .disabled(appModel.isWorking || !canSubmitChild)
         }
     }
 
@@ -149,4 +169,3 @@ private enum ParentAuthMode {
     AuthView()
         .environmentObject(AppViewModel())
 }
-

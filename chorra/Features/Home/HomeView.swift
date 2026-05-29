@@ -10,16 +10,13 @@ import SwiftUI
 struct HomeView: View {
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.chorraBackground
-                    .ignoresSafeArea()
-
-                Text("Home")
-                    .font(.largeTitle.weight(.bold))
-                    .foregroundStyle(Color.chorraTextPrimary)
+            ChorraScreen(title: "Home") {
+                ChorraCard {
+                    Text("Home")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
+                }
             }
-            .navigationTitle("Home")
-            .toolbarBackground(Color.chorraBackground, for: .navigationBar)
         }
     }
 }

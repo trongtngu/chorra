@@ -2,7 +2,7 @@
 
 ## Summary
 
-Chorra is a parent-child task and reward product. The MVP focuses on one complete household workflow: a parent creates an account, adds a child, creates and assigns a task, the child completes the task with photo evidence, the parent reviews the submission, and the child receives points after approval.
+Chorra is a parent-child task and reward product. The MVP focuses on one complete household workflow: a parent creates an account, adds a child, creates a reusable task, assigns a copied task instance, the child completes that assignment with photo evidence, the parent reviews the submission, and the child receives points after approval.
 
 The first version should prove the core trust loop:
 
@@ -33,7 +33,7 @@ The household groups parents, children, tasks, submissions, and rewards. For the
 1. Parent creates an account.
 2. Parent creates or is placed into a household.
 3. Parent adds a child.
-4. Parent creates a task with a title, optional description, and point value.
+4. Parent creates a reusable task with a title and point value.
 5. Parent assigns the task to one child.
 6. Child logs in and views assigned tasks.
 7. Child completes the task in the real world.
@@ -129,15 +129,13 @@ A task is created by a parent. It defines what should be done and how many point
 Minimum MVP fields:
 
 - Title.
-- Optional description.
 - Point value.
 - Created by parent.
 - Household.
-- Current state.
 
 ### Task Assignment
 
-A task assignment connects a task to a child. For the MVP, a task is assigned to one child.
+A task assignment connects a copied snapshot of a task to a child. Each assignment owns its child-specific lifecycle state, so the same parent-created task can be assigned multiple times.
 
 ### Task Submission
 
@@ -155,17 +153,17 @@ Approval records the parent's review decision. An approved submission completes 
 
 The points ledger records every points change for a child. The MVP should create positive ledger entries when a parent approves a task. Reward unlocks reduce the derived balance through reward redemption rows. Manual adjustments and allowance conversion are deferred.
 
-## Task States
+## Task Assignment States
 
-Tasks should move through a small explicit lifecycle.
+Task assignments should move through a small explicit lifecycle.
 
 ### Draft or Created
 
-The parent has created the task, but it has not yet been assigned to a child.
+The parent has created the reusable task, but it has not yet been assigned to a child.
 
 ### Assigned
 
-The task is assigned to a child and visible in the child's task list.
+The copied task assignment is assigned to a child and visible in the child's task list.
 
 ### Submitted
 
@@ -181,7 +179,7 @@ The parent has rejected the submission. The child can see that the task needs mo
 
 ### Completed
 
-The task is fully complete. The child has been rewarded, and no further child action is required.
+The task assignment is fully complete. The child has been rewarded, and no further child action is required.
 
 For the MVP, `approved` may be treated as the review event and `completed` as the final task state after the points ledger entry is created.
 
@@ -216,7 +214,7 @@ Included:
 - One household per parent.
 - Add child.
 - Create task.
-- Assign task to one child.
+- Assign copied task instances to children.
 - Child task list.
 - Child photo submission.
 - Parent review.
@@ -259,19 +257,19 @@ Given an authenticated parent, when they create a task with a title and point va
 
 ### Assign Task
 
-Given an existing child and task in the same household, when the parent assigns the task to the child, then the child can see the task in their assigned task list.
+Given an existing child and task in the same household, when the parent assigns the task to the child, then the child can see the copied task assignment in their assigned task list.
 
 ### Submit Task
 
-Given an assigned task, when the child marks it complete and attaches one photo, then the task becomes submitted and waits for parent review.
+Given an assigned task copy, when the child marks it complete and attaches one photo, then the assignment becomes submitted and waits for parent review.
 
 ### Approve Task
 
-Given a submitted task, when the parent approves it, then the task becomes complete and Chorra creates a points ledger entry for the child.
+Given a submitted task assignment, when the parent approves it, then the assignment becomes complete and Chorra creates a points ledger entry for the child.
 
 ### Reject Task
 
-Given a submitted task, when the parent rejects it, then the child can see that it needs more work and can submit it again with a new photo.
+Given a submitted task assignment, when the parent rejects it, then the child can see that it needs more work and can submit it again with a new photo.
 
 ### View Rewards
 
@@ -284,8 +282,8 @@ The MVP should enforce these access rules through Supabase Row Level Security:
 - A parent can read and manage data for their household.
 - A parent cannot access another household.
 - A child can read their own profile from any linked lightweight auth session.
-- A child can read only tasks assigned to them.
-- A child can create submissions only for their own assigned tasks.
+- A child can read only task assignments assigned to them.
+- A child can create submissions only for their own assigned task copies.
 - A child can upload and read only their own task submission photos.
 - A child cannot approve tasks or award points.
 - Points are awarded only by a trusted approval flow after parent approval.

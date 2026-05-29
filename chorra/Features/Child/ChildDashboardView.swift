@@ -185,7 +185,7 @@ private struct ChildHomeTab: View {
     }
 
     private var incompleteTasks: [ChildTaskItem] {
-        data.tasks.filter { $0.task.status == .assigned || $0.task.status == .rejected }
+        data.tasks.filter { $0.assignment.status == .assigned || $0.assignment.status == .rejected }
     }
 
 }
@@ -393,19 +393,19 @@ private struct ChildTaskCardView: View {
     var body: some View {
         HStack(spacing: 12) {
             ChorraIconView(
-                iconName: item.task.iconName,
+                iconName: item.assignment.iconName,
                 size: 46,
                 background: .clear,
                 padding: 7
             )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.task.title)
+                Text(item.assignment.title)
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.chorraTextPrimary)
                     .lineLimit(2)
 
-                ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
+                ChorraPointAmountLabel(amount: item.assignment.pointValue, iconSize: 15)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
 
@@ -425,7 +425,7 @@ private struct ChildTaskCardView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PastelCardColor.color(from: item.task.cardColorHex))
+        .background(PastelCardColor.color(from: item.assignment.cardColorHex))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
@@ -841,11 +841,10 @@ private extension ChildDashboardData {
             householdId: householdId,
             createdBy: UUID(),
             title: "Tidy bedroom",
-            description: "Make the bed and put clothes away.",
             pointValue: 10,
             cardColorHex: PastelCardColor.fallbackHex,
             iconName: "Icon_Hanger",
-            status: .assigned,
+            isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
         )
@@ -855,6 +854,11 @@ private extension ChildDashboardData {
             taskId: task.id,
             childId: child.id,
             assignedBy: UUID(),
+            title: task.title,
+            pointValue: task.pointValue,
+            cardColorHex: task.cardColorHex,
+            iconName: task.iconName,
+            status: .assigned,
             assignedAt: "2026-05-29"
         )
         let reward = Reward(
@@ -885,7 +889,6 @@ private extension ChildDashboardData {
             child: child,
             tasks: [
                 ChildTaskItem(
-                    task: task,
                     assignment: assignment,
                     latestSubmission: nil,
                     pointsEarned: 0
@@ -903,6 +906,7 @@ private extension ChildDashboardData {
                     householdId: householdId,
                     childId: child.id,
                     taskId: task.id,
+                    assignmentId: assignment.id,
                     submissionId: UUID(),
                     amount: 8,
                     reason: .taskApproved,

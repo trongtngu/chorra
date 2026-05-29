@@ -38,7 +38,7 @@ Core persisted concepts are:
 - A points ledger and `child_points_balances` view.
 - Rewards and reward redemptions.
 
-Database writes are mostly routed through security-definer RPCs such as parent bootstrap, child creation, child session claim, assigned task creation, task submission, submission review, reward creation/update/archive, and reward redemption. RLS policies are the authorization boundary; client-side checks are only for UX.
+Database writes are mostly routed through security-definer RPCs such as parent bootstrap, child creation, child session claim, task creation, task assignment, task submission, submission review, reward creation/update/archive, and reward redemption. RLS policies are the authorization boundary; client-side checks are only for UX.
 
 Task completion photos are uploaded to the private `task-photos` storage bucket. Storage paths are scoped by household, child, and submission id. Parent review uses short-lived signed URLs.
 
@@ -50,7 +50,7 @@ The current MVP supports these flows:
 - Parent account creation bootstraps a one-household parent profile.
 - Parent adds a child with display name, login name, and PIN.
 - Child starts from anonymous auth, then claims a child session using household code, login name, and PIN.
-- Parent creates a task assigned to one child, with title, optional description, point value, pastel card color, and catalog icon.
+- Parent creates reusable unassigned tasks with title, point value, pastel card color, and catalog icon, then assigns copied task instances to children.
 - Child opens an assigned or rejected task, captures a camera photo, and submits it for review.
 - Parent reviews the latest submission, approves it to complete the task and create a points ledger entry, or rejects it with optional feedback.
 - Parent creates, edits, and archives rewards.

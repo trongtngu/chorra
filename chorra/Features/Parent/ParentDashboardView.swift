@@ -54,7 +54,7 @@ struct ParentDashboardView: View {
                 .environmentObject(appModel)
         }
         .sheet(isPresented: $showingCreateTask) {
-            CreateTaskView(children: data.children)
+            TaskFormView(item: nil)
                 .environmentObject(appModel)
         }
         .sheet(isPresented: $showingCreateReward) {
@@ -259,46 +259,71 @@ private struct ChildSummaryRow: View {
 }
 
 private struct ParentTasksTab: View {
+    @EnvironmentObject private var appModel: AppViewModel
+
     let data: ParentDashboardData
     let onCreateTask: () -> Void
 
-    @State private var reviewingTask: ParentTaskItem?
+    @State private var reviewingTask: ParentTaskReviewItem?
+    @State private var assigningTask: ParentTaskItem?
+    @State private var editingTask: ParentTaskItem?
 
     var body: some View {
         ParentTabContainer(title: "Tasks") {
+            if !data.reviewItems.isEmpty {
+                ChorraSectionHeader(title: "Needs review")
+
+                ForEach(data.reviewItems) { item in
+                    Button {
+                        reviewingTask = item
+                    } label: {
+                        ParentTaskReviewCardView(item: item)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(appModel.isWorking)
+                }
+            }
+
             ChorraSectionHeader(
                 title: "Tasks",
                 actionTitle: "Create",
                 systemImage: "plus",
-                isDisabled: data.children.isEmpty,
                 action: onCreateTask
             )
 
-            if data.children.isEmpty {
-                ChorraCard {
-                    ChorraEmptyState(title: "Add a child before creating tasks", systemImage: "person.badge.plus")
-                }
-            } else if data.taskItems.isEmpty {
+            if data.taskItems.isEmpty {
                 ChorraCard {
                     ChorraEmptyState(title: "No tasks yet", systemImage: "checklist")
                 }
             } else {
                 ForEach(data.taskItems) { item in
-                    if item.isAwaitingReview {
-                        Button {
-                            reviewingTask = item
-                        } label: {
-                            ParentTaskCardView(item: item)
-                        }
-                        .buttonStyle(.plain)
-                    } else {
-                        ParentTaskCardView(item: item)
+                    ParentTaskCardView(
+                        item: item,
+                        canAssign: !data.children.isEmpty && !appModel.isWorking
+                    ) {
+                        editingTask = item
+                    } onAssign: {
+                        assigningTask = item
+                    }
+                }
+
+                if data.children.isEmpty {
+                    ChorraCard {
+                        ChorraEmptyState(title: "Add a child to assign tasks", systemImage: "person.badge.plus")
                     }
                 }
             }
         }
         .sheet(item: $reviewingTask) { item in
             ParentTaskReviewSheet(item: item)
+        }
+        .sheet(item: $assigningTask) { item in
+            AssignTaskView(item: item, children: data.children)
+                .environmentObject(appModel)
+        }
+        .sheet(item: $editingTask) { item in
+            TaskFormView(item: item)
+                .environmentObject(appModel)
         }
     }
 }
@@ -341,6 +366,62 @@ private struct ParentRewardsTab: View {
 
 private struct ParentTaskCardView: View {
     let item: ParentTaskItem
+    let canAssign: Bool
+    let onEdit: () -> Void
+    let onAssign: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(action: onEdit) {
+                HStack(spacing: 12) {
+                    ChorraIconView(
+                        iconName: item.task.iconName,
+                        size: 46,
+                        background: .clear,
+                        padding: 7
+                    )
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.task.title)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(Color.chorraTextPrimary)
+                            .lineLimit(2)
+
+                        ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.leading, 16)
+                .padding(.trailing, 72)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(PastelCardColor.color(from: item.task.cardColorHex))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit task \(item.task.title)")
+
+            Button(action: onAssign) {
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(canAssign ? Color.chorraPrimary : Color.chorraTextMuted)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canAssign)
+            .accessibilityLabel("Assign task")
+            .padding(.trailing, 16)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct ParentTaskReviewCardView: View {
+    let item: ParentTaskReviewItem
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -354,24 +435,24 @@ private struct ParentTaskCardView: View {
 
                 Spacer(minLength: 8)
 
-                ChorraPill(title: item.task.status.label, color: statusColor)
+                ChorraPill(title: item.assignment.status.label, color: statusColor)
             }
 
             HStack(spacing: 12) {
                 ChorraIconView(
-                    iconName: item.task.iconName,
+                    iconName: item.assignment.iconName,
                     size: 46,
                     background: .clear,
                     padding: 7
                 )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(item.task.title)
+                    Text(item.assignment.title)
                         .font(.headline.weight(.bold))
                         .foregroundStyle(Color.chorraTextPrimary)
                         .lineLimit(2)
 
-                    ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
+                    ChorraPointAmountLabel(amount: item.assignment.pointValue, iconSize: 15)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
 
@@ -388,7 +469,7 @@ private struct ParentTaskCardView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PastelCardColor.color(from: item.task.cardColorHex))
+        .background(PastelCardColor.color(from: item.assignment.cardColorHex))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
@@ -406,7 +487,7 @@ private struct ParentTaskCardView: View {
     }
 
     private var statusColor: Color {
-        switch item.task.status {
+        switch item.assignment.status {
         case .created:
             return .chorraTextSecondary
         case .assigned:
@@ -425,7 +506,7 @@ private struct ParentTaskReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appModel: AppViewModel
 
-    let item: ParentTaskItem
+    let item: ParentTaskReviewItem
 
     @State private var rejectionReason = ""
 
@@ -433,7 +514,7 @@ private struct ParentTaskReviewSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    ParentTaskCardView(item: item)
+                    ParentTaskReviewCardView(item: item)
 
                     ChorraCard {
                         VStack(alignment: .leading, spacing: 12) {
@@ -577,12 +658,6 @@ private struct ChildAvatarView: View {
     }
 }
 
-private extension ParentTaskItem {
-    var isAwaitingReview: Bool {
-        latestSubmission?.status == .submitted
-    }
-}
-
 private struct ParentRewardCardView: View {
     @EnvironmentObject private var appModel: AppViewModel
     let item: RewardItem
@@ -680,33 +755,257 @@ private struct AddChildView: View {
     }
 }
 
-private struct CreateTaskView: View {
+private struct TaskFormView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appModel: AppViewModel
 
+    let task: ChorraTask?
+    private let initialTitle: String
+    private let initialPointValue: Int
+    private let initialCardColorHex: String
+    private let initialIconName: String
+
+    @State private var title: String
+    @State private var pointValue: Int
+    @State private var cardColorHex: String
+    @State private var iconName: String
+    @State private var showingArchiveConfirmation = false
+    @State private var showingDiscardConfirmation = false
+    @State private var showingPointValueDialog = false
+
+    init(item: ParentTaskItem?) {
+        let startingTitle = item?.task.title ?? ""
+        let startingPointValue = item?.task.pointValue ?? 5
+        let startingCardColorHex = PastelCardColor.normalizedPaletteHex(
+            item?.task.cardColorHex ?? PastelCardColor.defaultHex
+        )
+        let startingIconName = ChorraIconCatalog.normalizedSelectableIconName(
+            item?.task.iconName ?? ChorraIconCatalog.defaultIconName
+        )
+
+        task = item?.task
+        initialTitle = startingTitle
+        initialPointValue = startingPointValue
+        initialCardColorHex = startingCardColorHex
+        initialIconName = startingIconName
+        _title = State(initialValue: startingTitle)
+        _pointValue = State(initialValue: startingPointValue)
+        _cardColorHex = State(initialValue: startingCardColorHex)
+        _iconName = State(initialValue: startingIconName)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 24) {
+                    TextField("Task title", text: $title, axis: .vertical)
+                        .font(.largeTitle.weight(.bold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.chorraTextPrimary)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 20)
+                        .padding(.horizontal, 8)
+
+                    RewardColorPickerRow(selectedHex: $cardColorHex)
+
+                    RewardGroupedSection {
+                        Button {
+                            showingPointValueDialog = true
+                        } label: {
+                            RewardListRow(
+                                iconName: ChorraIconCatalog.pointIconName,
+                                title: "Points",
+                                value: "\(pointValue)",
+                                showsChevron: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Points")
+                        .accessibilityValue("\(pointValue) points")
+                    }
+
+                    RewardGroupedSection {
+                        IconPickerPanel(selectedIconName: $iconName)
+                            .padding(.vertical, 4)
+                    }
+
+                    if task != nil {
+                        RewardGroupedSection {
+                            Button(role: .destructive) {
+                                showingArchiveConfirmation = true
+                            } label: {
+                                RewardListRow(
+                                    systemImage: "archivebox.fill",
+                                    title: "Archive task",
+                                    value: nil,
+                                    titleColor: .chorraError,
+                                    iconColor: .chorraError
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(appModel.isWorking)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.chorraSurface.ignoresSafeArea())
+            .tint(.chorraPrimary)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        if hasUnsavedChanges {
+                            showingDiscardConfirmation = true
+                        } else {
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Cancel", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color.chorraPrimary)
+                    }
+                    .accessibilityLabel("Cancel")
+                    .tint(.chorraPrimary)
+                    .buttonStyle(.plain)
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task {
+                            await save()
+                            if appModel.errorMessage == nil {
+                                dismiss()
+                            }
+                        }
+                    } label: {
+                        Label("Save", systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color.chorraPrimary)
+                    }
+                    .tint(.chorraPrimary)
+                    .buttonStyle(.plain)
+                    .disabled(appModel.isWorking || !canSave)
+                }
+            }
+        }
+        .overlay {
+            if showingPointValueDialog {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+
+                    TaskPointValueDialog(pointValue: $pointValue) {
+                        showingPointValueDialog = false
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            } else if showingDiscardConfirmation {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+
+                    RewardDiscardChangesDialog {
+                        showingDiscardConfirmation = false
+                    } onDiscard: {
+                        dismiss()
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: showingPointValueDialog)
+        .animation(.easeInOut(duration: 0.18), value: showingDiscardConfirmation)
+        .alert("Archive task?", isPresented: $showingArchiveConfirmation) {
+            Button("Archive", role: .destructive) {
+                if let task {
+                    Task {
+                        await appModel.archiveTask(task)
+                        if appModel.errorMessage == nil {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the task from the parent task list. Existing assigned copies stay unchanged.")
+        }
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var hasUnsavedChanges: Bool {
+        title != initialTitle
+            || pointValue != initialPointValue
+            || PastelCardColor.normalizedPaletteHex(cardColorHex) != initialCardColorHex
+            || ChorraIconCatalog.normalizedSelectableIconName(iconName) != initialIconName
+    }
+
+    private func save() async {
+        if let task {
+            await appModel.updateTask(
+                task: task,
+                title: title,
+                pointValue: pointValue,
+                cardColorHex: cardColorHex,
+                iconName: iconName
+            )
+        } else {
+            await appModel.createTask(
+                title: title,
+                pointValue: pointValue,
+                cardColorHex: cardColorHex,
+                iconName: iconName
+            )
+        }
+    }
+}
+
+private struct AssignTaskView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appModel: AppViewModel
+
+    let item: ParentTaskItem
     let children: [Child]
 
     @State private var selectedChildId: UUID?
-    @State private var title = ""
-    @State private var description = ""
-    @State private var pointValue = 5
-    @State private var cardColorHex = PastelCardColor.defaultHex
-    @State private var iconName = ChorraIconCatalog.defaultIconName
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Task") {
-                    CardColorPalettePicker(selectedHex: $cardColorHex)
-                    TextField("Title", text: $title)
-                    TextField("Description", text: $description, axis: .vertical)
-                    Stepper(value: $pointValue, in: 1...500) {
-                        ChorraPointAmountLabel(amount: pointValue, iconSize: 16)
-                    }
-                }
+                    HStack(spacing: 12) {
+                        ChorraIconView(
+                            iconName: item.task.iconName,
+                            size: 44,
+                            background: .clear,
+                            padding: 7
+                        )
 
-                Section("Icon") {
-                    IconPickerPanel(selectedIconName: $iconName)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.task.title)
+                                .font(.headline.weight(.bold))
+                                .foregroundStyle(Color.chorraTextPrimary)
+
+                            ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(Color.chorraTextSecondary)
+                        }
+                    }
                 }
 
                 Section("Assign to") {
@@ -721,7 +1020,7 @@ private struct CreateTaskView: View {
                 }
             }
             .chorraFormBackground()
-            .navigationTitle("Create task")
+            .navigationTitle("Assign task")
             .chorraNavigationBar()
             .onAppear {
                 selectedChildId = selectedChildId ?? children.first?.id
@@ -733,35 +1032,27 @@ private struct CreateTaskView: View {
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button("Assign") {
                         guard let childId = selectedChildId ?? children.first?.id else {
                             return
                         }
 
                         Task {
-                            await appModel.createAssignedTask(
-                                childId: childId,
-                                title: title,
-                                description: description,
-                                pointValue: pointValue,
-                                cardColorHex: cardColorHex,
-                                iconName: iconName
-                            )
+                            await appModel.assignTask(item.task, childId: childId)
                             if appModel.errorMessage == nil {
                                 dismiss()
                             }
                         }
                     }
                     .tint(.chorraSurface)
-                    .disabled(appModel.isWorking || !canSave)
+                    .disabled(appModel.isWorking || !canAssign)
                 }
             }
         }
     }
 
-    private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && (selectedChildId ?? children.first?.id) != nil
+    private var canAssign: Bool {
+        (selectedChildId ?? children.first?.id) != nil
     }
 }
 
@@ -770,81 +1061,172 @@ private struct RewardFormView: View {
     @EnvironmentObject private var appModel: AppViewModel
 
     let reward: Reward?
+    private let initialName: String
+    private let initialIconName: String
+    private let initialPointCost: Int
+    private let initialCardColorHex: String
 
     @State private var name: String
     @State private var iconName: String
     @State private var pointCost: Int
     @State private var cardColorHex: String
     @State private var showingArchiveConfirmation = false
+    @State private var showingDiscardConfirmation = false
+    @State private var showingPointCostDialog = false
 
     init(item: RewardItem?) {
+        let startingName = item?.reward.name ?? ""
+        let startingIconName = ChorraIconCatalog.normalizedSelectableIconName(
+            item?.reward.iconName ?? ChorraIconCatalog.defaultIconName
+        )
+        let startingPointCost = item?.reward.pointCost ?? 25
+        let startingCardColorHex = PastelCardColor.normalizedPaletteHex(
+            item?.reward.cardColorHex ?? PastelCardColor.defaultHex
+        )
+
         reward = item?.reward
-        _name = State(initialValue: item?.reward.name ?? "")
-        _iconName = State(
-            initialValue: ChorraIconCatalog.normalizedSelectableIconName(
-                item?.reward.iconName ?? ChorraIconCatalog.defaultIconName
-            )
-        )
-        _pointCost = State(initialValue: item?.reward.pointCost ?? 25)
-        _cardColorHex = State(
-            initialValue: PastelCardColor.normalizedPaletteHex(
-                item?.reward.cardColorHex ?? PastelCardColor.defaultHex
-            )
-        )
+        initialName = startingName
+        initialIconName = startingIconName
+        initialPointCost = startingPointCost
+        initialCardColorHex = startingCardColorHex
+        _name = State(initialValue: startingName)
+        _iconName = State(initialValue: startingIconName)
+        _pointCost = State(initialValue: startingPointCost)
+        _cardColorHex = State(initialValue: startingCardColorHex)
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Reward") {
-                    TextField("Name", text: $name)
-                    Stepper(value: $pointCost, in: 1...100000) {
-                        ChorraPointAmountLabel(amount: pointCost, iconSize: 16)
-                    }
-                }
+            ScrollView {
+                VStack(spacing: 24) {
+                    TextField("Reward name", text: $name, axis: .vertical)
+                        .font(.largeTitle.weight(.bold))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.chorraTextPrimary)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 20)
+                        .padding(.horizontal, 8)
 
-                Section("Icon") {
-                    IconPickerPanel(selectedIconName: $iconName)
-                }
+                    RewardColorPickerRow(selectedHex: $cardColorHex)
 
-                Section("Colour") {
-                    CardColorPalettePicker(selectedHex: $cardColorHex)
-                }
-
-                if reward != nil {
-                    Section {
-                        Button(role: .destructive) {
-                            showingArchiveConfirmation = true
+                    RewardGroupedSection {
+                        Button {
+                            showingPointCostDialog = true
                         } label: {
-                            Label("Archive reward", systemImage: "archivebox")
+                            RewardListRow(
+                                iconName: ChorraIconCatalog.pointIconName,
+                                title: "Points",
+                                value: "\(pointCost)",
+                                showsChevron: true
+                            )
                         }
-                        .disabled(appModel.isWorking)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Points")
+                        .accessibilityValue("\(pointCost) points")
+                    }
+
+                    RewardGroupedSection {
+                        IconPickerPanel(selectedIconName: $iconName)
+                            .padding(.vertical, 4)
+                    }
+
+                    if reward != nil {
+                        RewardGroupedSection {
+                            Button(role: .destructive) {
+                                showingArchiveConfirmation = true
+                            } label: {
+                                RewardListRow(
+                                    systemImage: "archivebox.fill",
+                                    title: "Archive reward",
+                                    value: nil,
+                                    titleColor: .chorraError,
+                                    iconColor: .chorraError
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(appModel.isWorking)
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
-            .chorraFormBackground()
-            .navigationTitle(reward == nil ? "Create reward" : "Edit reward")
-            .chorraNavigationBar()
+            .scrollContentBackground(.hidden)
+            .background(Color.chorraSoftSurface.ignoresSafeArea())
+            .tint(.chorraPrimary)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .tint(.chorraSurface)
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        if hasUnsavedChanges {
+                            showingDiscardConfirmation = true
+                        } else {
+                            dismiss()
+                        }
+                    } label: {
+                        Label("Cancel", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color.chorraPrimary)
+                    }
+                    .accessibilityLabel("Cancel")
+                    .tint(.chorraPrimary)
+                    .buttonStyle(.plain)
                 }
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
                         Task {
                             await save()
                             if appModel.errorMessage == nil {
                                 dismiss()
                             }
                         }
+                    } label: {
+                        Label("Save", systemImage: "checkmark")
+                            .labelStyle(.iconOnly)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(Color.chorraPrimary)
                     }
-                    .tint(.chorraSurface)
+                    .tint(.chorraPrimary)
+                    .buttonStyle(.plain)
                     .disabled(appModel.isWorking || !canSave)
                 }
             }
         }
+        .overlay {
+            if showingPointCostDialog {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+
+                    RewardPointCostDialog(pointCost: $pointCost) {
+                        showingPointCostDialog = false
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            } else if showingDiscardConfirmation {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+
+                    RewardDiscardChangesDialog {
+                        showingDiscardConfirmation = false
+                    } onDiscard: {
+                        dismiss()
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: showingPointCostDialog)
+        .animation(.easeInOut(duration: 0.18), value: showingDiscardConfirmation)
         .alert("Archive reward?", isPresented: $showingArchiveConfirmation) {
             Button("Archive", role: .destructive) {
                 if let reward {
@@ -867,6 +1249,13 @@ private struct RewardFormView: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var hasUnsavedChanges: Bool {
+        name != initialName
+            || ChorraIconCatalog.normalizedSelectableIconName(iconName) != initialIconName
+            || pointCost != initialPointCost
+            || PastelCardColor.normalizedPaletteHex(cardColorHex) != initialCardColorHex
+    }
+
     private func save() async {
         if let reward {
             await appModel.updateReward(
@@ -883,6 +1272,301 @@ private struct RewardFormView: View {
                 pointCost: pointCost,
                 cardColorHex: cardColorHex
             )
+        }
+    }
+}
+
+private struct RewardGroupedSection<Content: View>: View {
+    private let cornerRadius: CGFloat = 18
+
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Color.chorraBorder.opacity(0.36), lineWidth: 1)
+        }
+    }
+}
+
+private struct RewardColorPickerRow: View {
+    @Binding var selectedHex: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(PastelCardColor.allowedHexes, id: \.self) { hex in
+                Button {
+                    selectedHex = hex
+                } label: {
+                    Circle()
+                        .fill(PastelCardColor.color(from: hex))
+                        .overlay {
+                            Circle()
+                                .stroke(Color.chorraSurface, lineWidth: 3)
+                        }
+                        .overlay {
+                            if isSelected(hex) {
+                                Image(systemName: "checkmark")
+                                    .font(.headline.weight(.heavy))
+                                    .foregroundStyle(Color.chorraTextPrimary)
+                            }
+                        }
+                        .shadow(color: Color.chorraPrimary.opacity(0.16), radius: 2, x: 0, y: 1)
+                        .overlay {
+                            Circle()
+                                .stroke(
+                                    isSelected(hex) ? Color.chorraPrimary : Color.chorraBorder,
+                                    lineWidth: isSelected(hex) ? 2 : 1
+                                )
+                        }
+                        .frame(width: 40, height: 40)
+                }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Card colour \(hex)")
+                .accessibilityValue(isSelected(hex) ? "Selected" : "Not selected")
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .onAppear {
+            selectedHex = PastelCardColor.normalizedPaletteHex(selectedHex)
+        }
+    }
+
+    private func isSelected(_ hex: String) -> Bool {
+        PastelCardColor.normalizedPaletteHex(selectedHex) == hex
+    }
+}
+
+private struct RewardListRow: View {
+    var systemImage: String? = nil
+    var iconName: String? = nil
+    let title: String
+    let value: String?
+    var titleColor: Color = .chorraTextPrimary
+    var iconColor: Color = .chorraPrimary
+    var showsChevron = false
+
+    var body: some View {
+        HStack(spacing: 14) {
+            icon
+                .frame(width: 28)
+
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(titleColor)
+
+            Spacer(minLength: 12)
+
+            if let value {
+                Text(value)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+            }
+
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextPrimary.opacity(0.62))
+            }
+        }
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        if let iconName {
+            ChorraIconView(iconName: iconName, size: 28, padding: 0)
+        } else if let systemImage {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(iconColor)
+        }
+    }
+}
+
+private struct RewardDiscardChangesDialog: View {
+    let onKeepEditing: () -> Void
+    let onDiscard: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 8) {
+                Text("Discard changes?")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text("Changes won't be saved.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.chorraTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 12) {
+                Button(action: onDiscard) {
+                    Text("Discard")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
+
+                Button(action: onKeepEditing) {
+                    Text("Keep editing")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraPrimaryButtonStyle())
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
+        }
+    }
+}
+
+private struct RewardPointCostDialog: View {
+    @Binding var pointCost: Int
+    let onClose: () -> Void
+
+    private let pointCostRange: ClosedRange<Int> = 1...100000
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Price")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.chorraTextPrimary)
+
+            HStack(spacing: 20) {
+                Button {
+                    pointCost = max(pointCost - 1, pointCostRange.lowerBound)
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 48, height: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.chorraPrimary)
+                .background(Color.chorraPrimarySoft)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(pointCost <= pointCostRange.lowerBound)
+                .accessibilityLabel("Decrease price")
+
+                Text("\(pointCost)")
+                    .font(.system(size: 42, weight: .bold))
+                    .foregroundStyle(Color.chorraPrimary)
+                    .monospacedDigit()
+                    .frame(minWidth: 96)
+
+                Button {
+                    pointCost = min(pointCost + 1, pointCostRange.upperBound)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 48, height: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.chorraPrimary)
+                .background(Color.chorraPrimarySoft)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(pointCost >= pointCostRange.upperBound)
+                .accessibilityLabel("Increase price")
+            }
+
+            Button(action: onClose) {
+                Text("Done")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ChorraPrimaryButtonStyle())
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
+        }
+    }
+}
+
+private struct TaskPointValueDialog: View {
+    @Binding var pointValue: Int
+    let onClose: () -> Void
+
+    private let pointValueRange: ClosedRange<Int> = 1...500
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Points")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.chorraTextPrimary)
+
+            HStack(spacing: 20) {
+                Button {
+                    pointValue = max(pointValue - 1, pointValueRange.lowerBound)
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 48, height: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.chorraPrimary)
+                .background(Color.chorraPrimarySoft)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(pointValue <= pointValueRange.lowerBound)
+                .accessibilityLabel("Decrease points")
+
+                Text("\(pointValue)")
+                    .font(.system(size: 42, weight: .bold))
+                    .foregroundStyle(Color.chorraPrimary)
+                    .monospacedDigit()
+                    .frame(minWidth: 96)
+
+                Button {
+                    pointValue = min(pointValue + 1, pointValueRange.upperBound)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.bold))
+                        .frame(width: 48, height: 48)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.chorraPrimary)
+                .background(Color.chorraPrimarySoft)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .disabled(pointValue >= pointValueRange.upperBound)
+                .accessibilityLabel("Increase points")
+            }
+
+            Button(action: onClose) {
+                Text("Done")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ChorraPrimaryButtonStyle())
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
 }
@@ -921,11 +1605,10 @@ private extension ParentDashboardData {
             householdId: householdId,
             createdBy: parentId,
             title: "Pack school bag",
-            description: "Put lunchbox, reader, and hat in your bag.",
             pointValue: 8,
             cardColorHex: PastelCardColor.fallbackHex,
             iconName: ChorraIconCatalog.defaultIconName,
-            status: .submitted,
+            isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
         )
@@ -935,6 +1618,11 @@ private extension ParentDashboardData {
             taskId: task.id,
             childId: child.id,
             assignedBy: parentId,
+            title: task.title,
+            pointValue: task.pointValue,
+            cardColorHex: task.cardColorHex,
+            iconName: task.iconName,
+            status: .submitted,
             assignedAt: "2026-05-29"
         )
         let submission = TaskSubmission(
@@ -1001,8 +1689,10 @@ private extension ParentDashboardData {
                 )
             ],
             taskItems: [
-                ParentTaskItem(
-                    task: task,
+                ParentTaskItem(task: task)
+            ],
+            reviewItems: [
+                ParentTaskReviewItem(
                     assignment: assignment,
                     child: child,
                     latestSubmission: submission,

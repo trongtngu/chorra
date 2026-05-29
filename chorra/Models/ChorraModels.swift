@@ -108,11 +108,10 @@ struct ChorraTask: Codable, Identifiable, Hashable {
     let householdId: UUID
     let createdBy: UUID
     let title: String
-    let description: String?
     let pointValue: Int
     let cardColorHex: String
     let iconName: String
-    let status: TaskStatus
+    let isArchived: Bool
     let createdAt: String
     let updatedAt: String
 
@@ -121,11 +120,10 @@ struct ChorraTask: Codable, Identifiable, Hashable {
         case householdId = "household_id"
         case createdBy = "created_by"
         case title
-        case description
         case pointValue = "point_value"
         case cardColorHex = "card_color_hex"
         case iconName = "icon_name"
-        case status
+        case isArchived = "is_archived"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -137,6 +135,11 @@ struct TaskAssignment: Codable, Identifiable, Hashable {
     let taskId: UUID
     let childId: UUID
     let assignedBy: UUID
+    let title: String
+    let pointValue: Int
+    let cardColorHex: String
+    let iconName: String
+    let status: TaskStatus
     let assignedAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -145,6 +148,11 @@ struct TaskAssignment: Codable, Identifiable, Hashable {
         case taskId = "task_id"
         case childId = "child_id"
         case assignedBy = "assigned_by"
+        case title
+        case pointValue = "point_value"
+        case cardColorHex = "card_color_hex"
+        case iconName = "icon_name"
+        case status
         case assignedAt = "assigned_at"
     }
 }
@@ -202,6 +210,7 @@ struct PointsLedgerEntry: Codable, Identifiable, Hashable {
     let householdId: UUID
     let childId: UUID
     let taskId: UUID
+    let assignmentId: UUID
     let submissionId: UUID
     let amount: Int
     let reason: LedgerReason
@@ -213,6 +222,7 @@ struct PointsLedgerEntry: Codable, Identifiable, Hashable {
         case householdId = "household_id"
         case childId = "child_id"
         case taskId = "task_id"
+        case assignmentId = "assignment_id"
         case submissionId = "submission_id"
         case amount
         case reason
@@ -289,17 +299,21 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
 
 struct ParentTaskItem: Identifiable, Hashable {
     let task: ChorraTask
-    let assignment: TaskAssignment?
+
+    var id: UUID { task.id }
+}
+
+struct ParentTaskReviewItem: Identifiable, Hashable {
+    let assignment: TaskAssignment
     let child: Child?
     let latestSubmission: TaskSubmission?
     let image: TaskSubmissionImage?
     var signedImageURL: URL?
 
-    var id: UUID { task.id }
+    var id: UUID { assignment.id }
 }
 
 struct ChildTaskItem: Identifiable, Hashable {
-    let task: ChorraTask
     let assignment: TaskAssignment
     let latestSubmission: TaskSubmission?
     let pointsEarned: Int

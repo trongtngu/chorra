@@ -220,11 +220,10 @@ struct ChorraToolbarIcon: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.headline)
+            .font(.headline.weight(.semibold))
             .foregroundStyle(Color.chorraSurface)
             .frame(width: 36, height: 36)
-            .background(Color.chorraSurface.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(Rectangle())
     }
 }
 

@@ -14,6 +14,7 @@ struct ParentDashboardData: Hashable {
     let children: [Child]
     let balances: [ChildPointsBalance]
     let taskItems: [ParentTaskItem]
+    let reviewItems: [ParentTaskReviewItem]
     let rewards: [RewardItem]
     let redemptions: [RewardRedemptionItem]
 }
@@ -107,22 +108,60 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
-    func createAssignedTask(
-        childId: UUID,
+    func createTask(
         title: String,
-        description: String,
         pointValue: Int,
         cardColorHex: String,
         iconName: String
     ) async throws -> ParentDashboardData {
-        let _: TaskAssignment = try await client
-            .rpc("create_assigned_task", params: CreateAssignedTaskParams(
-                pChildId: childId,
+        let _: ChorraTask = try await client
+            .rpc("create_task", params: CreateTaskParams(
                 pTitle: title,
-                pDescription: description,
                 pPointValue: pointValue,
                 pCardColorHex: cardColorHex,
                 pIconName: ChorraIconCatalog.normalizedIconName(iconName)
+            ))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func updateTask(
+        task: ChorraTask,
+        title: String,
+        pointValue: Int,
+        cardColorHex: String,
+        iconName: String
+    ) async throws -> ParentDashboardData {
+        let _: ChorraTask = try await client
+            .rpc("update_task", params: UpdateTaskParams(
+                pTaskId: task.id,
+                pTitle: title,
+                pPointValue: pointValue,
+                pCardColorHex: cardColorHex,
+                pIconName: ChorraIconCatalog.normalizedIconName(iconName)
+            ))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func archiveTask(_ task: ChorraTask) async throws -> ParentDashboardData {
+        let _: ChorraTask = try await client
+            .rpc("archive_task", params: ArchiveTaskParams(pTaskId: task.id))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func assignTask(_ task: ChorraTask, childId: UUID) async throws -> ParentDashboardData {
+        let _: TaskAssignment = try await client
+            .rpc("assign_task", params: AssignTaskParams(
+                pTaskId: task.id,
+                pChildId: childId
             ))
             .execute()
             .value
@@ -273,6 +312,7 @@ final class ChorraService {
             .from("tasks")
             .select()
             .eq("household_id", value: profile.householdId.uuidString)
+            .eq("is_archived", value: false)
             .execute()
             .value
 
@@ -312,8 +352,8 @@ final class ChorraService {
             .execute()
             .value
 
-        let taskItems = await buildParentTaskItems(
-            tasks: tasks,
+        let taskItems = buildParentTaskItems(tasks: tasks)
+        let reviewItems = buildParentTaskReviewItems(
             assignments: assignments,
             children: children,
             submissions: submissions,
@@ -327,18 +367,13 @@ final class ChorraService {
             children: children.sorted { $0.displayName < $1.displayName },
             balances: balances,
             taskItems: taskItems,
+            reviewItems: reviewItems,
             rewards: buildRewardItems(rewards: rewards),
             redemptions: redemptionItems
         )
     }
 
     private func loadChildDashboard(child: Child) async throws -> ChildDashboardData {
-        let tasks: [ChorraTask] = try await client
-            .from("tasks")
-            .select()
-            .execute()
-            .value
-
         let assignments: [TaskAssignment] = try await client
             .from("task_assignments")
             .select()
@@ -378,25 +413,19 @@ final class ChorraService {
             .value
 
         let submissionsByAssignment = Dictionary(grouping: submissions, by: \.assignmentId)
-        let ledgerByTask = Dictionary(grouping: ledger, by: \.taskId)
-        let tasksById = Dictionary(uniqueKeysWithValues: tasks.map { ($0.id, $0) })
+        let ledgerByAssignment = Dictionary(grouping: ledger, by: \.assignmentId)
 
-        let childTasks = assignments.compactMap { assignment -> ChildTaskItem? in
-            guard let task = tasksById[assignment.taskId] else {
-                return nil
-            }
-
+        let childTasks = assignments.map { assignment -> ChildTaskItem in
             let latestSubmission = submissionsByAssignment[assignment.id]?.sorted { $0.createdAt > $1.createdAt }.first
-            let pointsEarned = ledgerByTask[task.id]?.reduce(0) { $0 + $1.amount } ?? 0
+            let pointsEarned = ledgerByAssignment[assignment.id]?.reduce(0) { $0 + $1.amount } ?? 0
 
             return ChildTaskItem(
-                task: task,
                 assignment: assignment,
                 latestSubmission: latestSubmission,
                 pointsEarned: pointsEarned
             )
         }
-        .sorted { $0.task.createdAt > $1.task.createdAt }
+        .sorted { $0.assignment.assignedAt > $1.assignment.assignedAt }
 
         return ChildDashboardData(
             child: child,
@@ -420,34 +449,42 @@ final class ChorraService {
             .value
     }
 
-    private func buildParentTaskItems(
-        tasks: [ChorraTask],
+    private func buildParentTaskItems(tasks: [ChorraTask]) -> [ParentTaskItem] {
+        tasks
+            .map { ParentTaskItem(task: $0) }
+            .sorted { $0.task.createdAt > $1.task.createdAt }
+    }
+
+    private func buildParentTaskReviewItems(
         assignments: [TaskAssignment],
         children: [Child],
         submissions: [TaskSubmission],
         images: [TaskSubmissionImage]
-    ) async -> [ParentTaskItem] {
-        let assignmentsByTask = Dictionary(uniqueKeysWithValues: assignments.map { ($0.taskId, $0) })
+    ) -> [ParentTaskReviewItem] {
         let childrenById = Dictionary(uniqueKeysWithValues: children.map { ($0.id, $0) })
         let submissionsByAssignment = Dictionary(grouping: submissions, by: \.assignmentId)
         let imagesBySubmission = Dictionary(uniqueKeysWithValues: images.map { ($0.submissionId, $0) })
 
-        return tasks
-            .map { task in
-                let assignment = assignmentsByTask[task.id]
-                let latestSubmission = assignment.flatMap { submissionsByAssignment[$0.id]?.sorted { $0.createdAt > $1.createdAt }.first }
-                let image = latestSubmission.flatMap { imagesBySubmission[$0.id] }
+        return assignments
+            .compactMap { assignment -> ParentTaskReviewItem? in
+                let latestSubmission = submissionsByAssignment[assignment.id]?.sorted { $0.createdAt > $1.createdAt }.first
 
-                return ParentTaskItem(
-                    task: task,
+                guard latestSubmission?.status == .submitted else {
+                    return nil
+                }
+
+                return ParentTaskReviewItem(
                     assignment: assignment,
-                    child: assignment.flatMap { childrenById[$0.childId] },
+                    child: childrenById[assignment.childId],
                     latestSubmission: latestSubmission,
-                    image: image,
+                    image: latestSubmission.flatMap { imagesBySubmission[$0.id] },
                     signedImageURL: nil
                 )
             }
-            .sorted { $0.task.createdAt > $1.task.createdAt }
+            .sorted {
+                ($0.latestSubmission?.createdAt ?? $0.assignment.assignedAt) >
+                    ($1.latestSubmission?.createdAt ?? $1.assignment.assignedAt)
+            }
     }
 
     private func buildRewardItems(rewards: [Reward]) -> [RewardItem] {
@@ -521,21 +558,51 @@ private struct ClaimChildSessionParams: Encodable {
     }
 }
 
-private struct CreateAssignedTaskParams: Encodable {
-    let pChildId: UUID
+private struct CreateTaskParams: Encodable {
     let pTitle: String
-    let pDescription: String
     let pPointValue: Int
     let pCardColorHex: String
     let pIconName: String
 
     enum CodingKeys: String, CodingKey {
-        case pChildId = "p_child_id"
         case pTitle = "p_title"
-        case pDescription = "p_description"
         case pPointValue = "p_point_value"
         case pCardColorHex = "p_card_color_hex"
         case pIconName = "p_icon_name"
+    }
+}
+
+private struct AssignTaskParams: Encodable {
+    let pTaskId: UUID
+    let pChildId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pTaskId = "p_task_id"
+        case pChildId = "p_child_id"
+    }
+}
+
+private struct UpdateTaskParams: Encodable {
+    let pTaskId: UUID
+    let pTitle: String
+    let pPointValue: Int
+    let pCardColorHex: String
+    let pIconName: String
+
+    enum CodingKeys: String, CodingKey {
+        case pTaskId = "p_task_id"
+        case pTitle = "p_title"
+        case pPointValue = "p_point_value"
+        case pCardColorHex = "p_card_color_hex"
+        case pIconName = "p_icon_name"
+    }
+}
+
+private struct ArchiveTaskParams: Encodable {
+    let pTaskId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pTaskId = "p_task_id"
     }
 }
 

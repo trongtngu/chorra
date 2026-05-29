@@ -93,23 +93,52 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func createAssignedTask(
-        childId: UUID,
+    func createTask(
         title: String,
-        description: String,
         pointValue: Int,
         cardColorHex: String,
         iconName: String
     ) async {
         await run {
-            let data = try await serviceOrThrow().createAssignedTask(
-                childId: childId,
+            let data = try await serviceOrThrow().createTask(
                 title: title,
-                description: description,
                 pointValue: pointValue,
                 cardColorHex: cardColorHex,
                 iconName: iconName
             )
+            session = .parent(try await decorate(data))
+        }
+    }
+
+    func updateTask(
+        task: ChorraTask,
+        title: String,
+        pointValue: Int,
+        cardColorHex: String,
+        iconName: String
+    ) async {
+        await run {
+            let data = try await serviceOrThrow().updateTask(
+                task: task,
+                title: title,
+                pointValue: pointValue,
+                cardColorHex: cardColorHex,
+                iconName: iconName
+            )
+            session = .parent(try await decorate(data))
+        }
+    }
+
+    func archiveTask(_ task: ChorraTask) async {
+        await run {
+            let data = try await serviceOrThrow().archiveTask(task)
+            session = .parent(try await decorate(data))
+        }
+    }
+
+    func assignTask(_ task: ChorraTask, childId: UUID) async {
+        await run {
+            let data = try await serviceOrThrow().assignTask(task, childId: childId)
             session = .parent(try await decorate(data))
         }
     }
@@ -230,14 +259,14 @@ final class AppViewModel: ObservableObject {
             return data
         }
 
-        var items = data.taskItems
+        var reviewItems = data.reviewItems
 
-        for index in items.indices {
-            guard let image = items[index].image else {
+        for index in reviewItems.indices {
+            guard let image = reviewItems[index].image else {
                 continue
             }
 
-            items[index].signedImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
+            reviewItems[index].signedImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
         }
 
         return ParentDashboardData(
@@ -245,7 +274,8 @@ final class AppViewModel: ObservableObject {
             household: data.household,
             children: data.children,
             balances: data.balances,
-            taskItems: items,
+            taskItems: data.taskItems,
+            reviewItems: reviewItems,
             rewards: data.rewards,
             redemptions: data.redemptions
         )

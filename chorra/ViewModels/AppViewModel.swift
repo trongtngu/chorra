@@ -93,13 +93,20 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func createAssignedTask(childId: UUID, title: String, description: String, pointValue: Int) async {
+    func createAssignedTask(
+        childId: UUID,
+        title: String,
+        description: String,
+        pointValue: Int,
+        cardColorHex: String
+    ) async {
         await run {
             let data = try await serviceOrThrow().createAssignedTask(
                 childId: childId,
                 title: title,
                 description: description,
-                pointValue: pointValue
+                pointValue: pointValue,
+                cardColorHex: cardColorHex
             )
             session = .parent(try await decorate(data))
         }
@@ -124,13 +131,12 @@ final class AppViewModel: ObservableObject {
         await review(submission, decision: .rejected, rejectionReason: reason)
     }
 
-    func createReward(name: String, description: String, pointCost: Int, jpegData: Data?) async {
+    func createReward(name: String, emoji: String, pointCost: Int) async {
         await run {
             let data = try await serviceOrThrow().createReward(
                 name: name,
-                description: description,
-                pointCost: pointCost,
-                jpegData: jpegData
+                emoji: emoji,
+                pointCost: pointCost
             )
             session = .parent(try await decorate(data))
         }
@@ -139,17 +145,15 @@ final class AppViewModel: ObservableObject {
     func updateReward(
         reward: Reward,
         name: String,
-        description: String,
-        pointCost: Int,
-        imageUpdate: RewardImageUpdate
+        emoji: String,
+        pointCost: Int
     ) async {
         await run {
             let data = try await serviceOrThrow().updateReward(
                 reward: reward,
                 name: name,
-                description: description,
-                pointCost: pointCost,
-                imageUpdate: imageUpdate
+                emoji: emoji,
+                pointCost: pointCost
             )
             session = .parent(try await decorate(data))
         }
@@ -222,8 +226,6 @@ final class AppViewModel: ObservableObject {
         }
 
         var items = data.taskItems
-        var rewards = data.rewards
-        var redemptions = data.redemptions
 
         for index in items.indices {
             guard let image = items[index].image else {
@@ -233,64 +235,25 @@ final class AppViewModel: ObservableObject {
             items[index].signedImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
         }
 
-        for index in rewards.indices {
-            guard let path = rewards[index].reward.imageStoragePath else {
-                continue
-            }
-
-            rewards[index].signedImageURL = try? await service.signedRewardImageURL(path: path)
-        }
-
-        for index in redemptions.indices {
-            guard let path = redemptions[index].redemption.rewardImageStoragePath else {
-                continue
-            }
-
-            redemptions[index].signedImageURL = try? await service.signedRewardImageURL(path: path)
-        }
-
         return ParentDashboardData(
             profile: data.profile,
             household: data.household,
             children: data.children,
             balances: data.balances,
             taskItems: items,
-            rewards: rewards,
-            redemptions: redemptions
+            rewards: data.rewards,
+            redemptions: data.redemptions
         )
     }
 
     private func decorate(_ data: ChildDashboardData) async throws -> ChildDashboardData {
-        guard let service else {
-            return data
-        }
-
-        var rewards = data.rewards
-        var redemptions = data.redemptions
-
-        for index in rewards.indices {
-            guard let path = rewards[index].reward.imageStoragePath else {
-                continue
-            }
-
-            rewards[index].signedImageURL = try? await service.signedRewardImageURL(path: path)
-        }
-
-        for index in redemptions.indices {
-            guard let path = redemptions[index].redemption.rewardImageStoragePath else {
-                continue
-            }
-
-            redemptions[index].signedImageURL = try? await service.signedRewardImageURL(path: path)
-        }
-
         return ChildDashboardData(
             child: data.child,
             tasks: data.tasks,
             balance: data.balance,
             ledger: data.ledger,
-            rewards: rewards,
-            redemptions: redemptions
+            rewards: data.rewards,
+            redemptions: data.redemptions
         )
     }
 

@@ -5,9 +5,7 @@
 //  Created by Codex on 27/5/2026.
 //
 
-import PhotosUI
 import SwiftUI
-import UIKit
 
 struct ParentDashboardView: View {
     @EnvironmentObject private var appModel: AppViewModel
@@ -297,6 +295,10 @@ private struct ParentRewardsTab: View {
     let data: ParentDashboardData
     let onCreateReward: () -> Void
     let onEditReward: (RewardItem) -> Void
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
 
     var body: some View {
         ParentTabContainer(title: "Rewards") {
@@ -312,9 +314,9 @@ private struct ParentRewardsTab: View {
                     ChorraEmptyState(title: "No rewards yet", systemImage: "gift")
                 }
             } else {
-                ForEach(data.rewards) { item in
-                    ChorraCard {
-                        ParentRewardRowView(item: item) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(data.rewards) { item in
+                        ParentRewardCardView(item: item) {
                             onEditReward(item)
                         }
                     }
@@ -325,7 +327,7 @@ private struct ParentRewardsTab: View {
 
             ChorraCard {
                 if data.redemptions.isEmpty {
-                    ChorraEmptyState(title: "No rewards redeemed yet", systemImage: "clock")
+                    ChorraEmptyState(title: "No rewards unlocked yet", systemImage: "clock")
                 } else {
                     ForEach(Array(data.redemptions.enumerated()), id: \.element.id) { index, item in
                         RewardRedemptionRowView(item: item, showsChild: true)
@@ -444,45 +446,62 @@ private struct ParentTaskRowView: View {
     }
 }
 
-private struct ParentRewardRowView: View {
+private struct ParentRewardCardView: View {
     @EnvironmentObject private var appModel: AppViewModel
     let item: RewardItem
     let onEdit: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RewardThumbnailView(url: item.signedImageURL, size: 64)
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 8) {
+                Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 7) {
+                RewardEmojiView(emoji: item.reward.emoji, size: 50)
+
                 Text(item.reward.name)
-                    .font(.headline)
+                    .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.chorraTextPrimary)
-
-                if let description = item.reward.description, !description.isEmpty {
-                    Text(description)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.chorraTextSecondary)
-                }
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
 
                 Text("\(item.reward.pointCost) pts")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.chorraPrimary)
 
-                HStack {
-                    Button("Edit") {
-                        onEdit()
-                    }
-                    .buttonStyle(ChorraSecondaryButtonStyle())
-                    .disabled(appModel.isWorking)
-
-                    Button("Archive") {
-                        Task { await appModel.archiveReward(item.reward) }
-                    }
-                    .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
-                    .disabled(appModel.isWorking)
-                }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+
+            Menu {
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Edit", systemImage: "pencil")
+                }
+
+                Button(role: .destructive) {
+                    Task { await appModel.archiveReward(item.reward) }
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle.fill")
+                    .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.chorraTextSecondary)
+            }
+            .disabled(appModel.isWorking)
+            .padding(10)
+        }
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(Color.chorraSoftSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
 }
@@ -493,7 +512,7 @@ struct RewardRedemptionRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            RewardThumbnailView(url: item.signedImageURL, size: 52)
+            RewardEmojiView(emoji: item.redemption.rewardEmoji, size: 28)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.redemption.rewardName)
@@ -518,41 +537,20 @@ struct RewardRedemptionRowView: View {
     }
 }
 
-struct RewardThumbnailView: View {
-    let url: URL?
+struct RewardEmojiView: View {
+    let emoji: String
     let size: CGFloat
 
     var body: some View {
-        Group {
-            if let url {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    case .failure:
-                        placeholder
-                    @unknown default:
-                        placeholder
-                    }
-                }
-            } else {
-                placeholder
-            }
-        }
-        .frame(width: size, height: size)
-        .background(Color.chorraSoftSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .clipped()
+        Text(displayEmoji)
+            .font(.system(size: size))
+            .frame(width: size * 1.7, height: size * 1.7)
+            .background(Color.chorraSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private var placeholder: some View {
-        Image(systemName: "gift.fill")
-            .font(.title3)
-            .foregroundStyle(Color.chorraPrimary)
+    private var displayEmoji: String {
+        emoji.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "🎁"
     }
 }
 
@@ -621,6 +619,7 @@ private struct CreateTaskView: View {
     @State private var title = ""
     @State private var description = ""
     @State private var pointValue = 5
+    @State private var cardColorHex = PastelCardColor.randomHex()
 
     var body: some View {
         NavigationStack {
@@ -665,7 +664,8 @@ private struct CreateTaskView: View {
                                 childId: childId,
                                 title: title,
                                 description: description,
-                                pointValue: pointValue
+                                pointValue: pointValue,
+                                cardColorHex: cardColorHex
                             )
                             if appModel.errorMessage == nil {
                                 dismiss()
@@ -690,21 +690,15 @@ private struct RewardFormView: View {
     @EnvironmentObject private var appModel: AppViewModel
 
     let reward: Reward?
-    let existingImageURL: URL?
 
     @State private var name: String
-    @State private var description: String
+    @State private var emoji: String
     @State private var pointCost: Int
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var selectedImage: UIImage?
-    @State private var selectedJPEGData: Data?
-    @State private var imageRemoved = false
 
     init(item: RewardItem?) {
         reward = item?.reward
-        existingImageURL = item?.signedImageURL
         _name = State(initialValue: item?.reward.name ?? "")
-        _description = State(initialValue: item?.reward.description ?? "")
+        _emoji = State(initialValue: item?.reward.emoji ?? "🎁")
         _pointCost = State(initialValue: item?.reward.pointCost ?? 25)
     }
 
@@ -712,63 +706,15 @@ private struct RewardFormView: View {
         NavigationStack {
             Form {
                 Section("Reward") {
+                    TextField("Emoji", text: $emoji)
+                        .font(.title2)
                     TextField("Name", text: $name)
-                    TextField("Description", text: $description, axis: .vertical)
                     Stepper("\(pointCost) pts", value: $pointCost, in: 1...100000)
-                }
-
-                Section("Image") {
-                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Label("Choose image", systemImage: "photo")
-                    }
-
-                    if let selectedImage {
-                        Image(uiImage: selectedImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    } else if !imageRemoved, let existingImageURL {
-                        AsyncImage(url: existingImageURL) { phase in
-                            switch phase {
-                            case .empty:
-                                ProgressView()
-                                    .frame(maxWidth: .infinity, minHeight: 180)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 240)
-                                    .clipped()
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            case .failure:
-                                Text("Image unavailable")
-                                    .foregroundStyle(Color.chorraTextSecondary)
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                    }
-
-                    if selectedImage != nil || (!imageRemoved && existingImageURL != nil) {
-                        Button("Remove image", role: .destructive) {
-                            selectedPhotoItem = nil
-                            selectedImage = nil
-                            selectedJPEGData = nil
-                            imageRemoved = true
-                        }
-                    }
                 }
             }
             .chorraFormBackground()
             .navigationTitle(reward == nil ? "Create reward" : "Edit reward")
             .chorraNavigationBar()
-            .onChange(of: selectedPhotoItem) { _, newItem in
-                Task {
-                    await loadPhoto(from: newItem)
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -795,47 +741,25 @@ private struct RewardFormView: View {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private var normalizedEmoji: String {
+        emoji.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "🎁"
+    }
+
     private func save() async {
         if let reward {
-            let imageUpdate: RewardImageUpdate
-
-            if let selectedJPEGData {
-                imageUpdate = .replace(selectedJPEGData)
-            } else if imageRemoved {
-                imageUpdate = .remove
-            } else {
-                imageUpdate = .keep
-            }
-
             await appModel.updateReward(
                 reward: reward,
                 name: name,
-                description: description,
-                pointCost: pointCost,
-                imageUpdate: imageUpdate
+                emoji: normalizedEmoji,
+                pointCost: pointCost
             )
         } else {
             await appModel.createReward(
                 name: name,
-                description: description,
-                pointCost: pointCost,
-                jpegData: selectedJPEGData
+                emoji: normalizedEmoji,
+                pointCost: pointCost
             )
         }
-    }
-
-    private func loadPhoto(from item: PhotosPickerItem?) async {
-        guard let data = try? await item?.loadTransferable(type: Data.self),
-              let image = UIImage(data: data),
-              let jpegData = image.jpegData(compressionQuality: 0.82) else {
-            selectedImage = nil
-            selectedJPEGData = nil
-            return
-        }
-
-        selectedImage = image
-        selectedJPEGData = jpegData
-        imageRemoved = false
     }
 }
 
@@ -875,6 +799,7 @@ private extension ParentDashboardData {
             title: "Pack school bag",
             description: "Put lunchbox, reader, and hat in your bag.",
             pointValue: 8,
+            cardColorHex: PastelCardColor.fallbackHex,
             status: .submitted,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -905,9 +830,8 @@ private extension ParentDashboardData {
             householdId: householdId,
             createdBy: parentId,
             name: "Movie night",
-            description: "Choose the family movie.",
+            emoji: "🎬",
             pointCost: 30,
-            imageStoragePath: nil,
             isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -919,9 +843,8 @@ private extension ParentDashboardData {
             rewardId: reward.id,
             redeemedBy: child.id,
             rewardName: reward.name,
-            rewardDescription: reward.description,
+            rewardEmoji: reward.emoji,
             rewardPointCost: reward.pointCost,
-            rewardImageStoragePath: nil,
             redeemedAt: "2026-05-29"
         )
 
@@ -961,8 +884,8 @@ private extension ParentDashboardData {
                     signedImageURL: nil
                 )
             ],
-            rewards: [RewardItem(reward: reward, signedImageURL: nil)],
-            redemptions: [RewardRedemptionItem(redemption: redemption, child: child, signedImageURL: nil)]
+            rewards: [RewardItem(reward: reward)],
+            redemptions: [RewardRedemptionItem(redemption: redemption, child: child)]
         )
     }
 }

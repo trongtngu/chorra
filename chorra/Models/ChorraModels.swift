@@ -110,6 +110,7 @@ struct ChorraTask: Codable, Identifiable, Hashable {
     let title: String
     let description: String?
     let pointValue: Int
+    let cardColorHex: String
     let status: TaskStatus
     let createdAt: String
     let updatedAt: String
@@ -121,6 +122,7 @@ struct ChorraTask: Codable, Identifiable, Hashable {
         case title
         case description
         case pointValue = "point_value"
+        case cardColorHex = "card_color_hex"
         case status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -238,9 +240,8 @@ struct Reward: Codable, Identifiable, Hashable {
     let householdId: UUID
     let createdBy: UUID
     let name: String
-    let description: String?
+    let emoji: String
     let pointCost: Int
-    let imageStoragePath: String?
     let isArchived: Bool
     let createdAt: String
     let updatedAt: String
@@ -250,9 +251,8 @@ struct Reward: Codable, Identifiable, Hashable {
         case householdId = "household_id"
         case createdBy = "created_by"
         case name
-        case description
+        case emoji
         case pointCost = "point_cost"
-        case imageStoragePath = "image_storage_path"
         case isArchived = "is_archived"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -266,9 +266,8 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
     let rewardId: UUID
     let redeemedBy: UUID
     let rewardName: String
-    let rewardDescription: String?
+    let rewardEmoji: String
     let rewardPointCost: Int
-    let rewardImageStoragePath: String?
     let redeemedAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -278,9 +277,8 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
         case rewardId = "reward_id"
         case redeemedBy = "redeemed_by"
         case rewardName = "reward_name"
-        case rewardDescription = "reward_description"
+        case rewardEmoji = "reward_emoji"
         case rewardPointCost = "reward_point_cost"
-        case rewardImageStoragePath = "reward_image_storage_path"
         case redeemedAt = "redeemed_at"
     }
 }
@@ -307,7 +305,6 @@ struct ChildTaskItem: Identifiable, Hashable {
 
 struct RewardItem: Identifiable, Hashable {
     let reward: Reward
-    var signedImageURL: URL?
 
     var id: UUID { reward.id }
 }
@@ -315,7 +312,6 @@ struct RewardItem: Identifiable, Hashable {
 struct RewardRedemptionItem: Identifiable, Hashable {
     let redemption: RewardRedemption
     let child: Child?
-    var signedImageURL: URL?
 
     var id: UUID { redemption.id }
 }

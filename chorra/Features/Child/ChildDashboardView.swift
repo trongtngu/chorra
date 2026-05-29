@@ -15,7 +15,7 @@ struct ChildDashboardView: View {
     let data: ChildDashboardData
 
     @State private var selectedTab: ChildDashboardTab = .home
-    @State private var rewardToRedeem: RewardItem?
+    @State private var rewardToUnlock: RewardItem?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -28,7 +28,7 @@ struct ChildDashboardView: View {
 
             ChildRewardsTab(
                 data: data,
-                rewardToRedeem: $rewardToRedeem
+                rewardToUnlock: $rewardToUnlock
             )
             .environmentObject(appModel)
             .tag(ChildDashboardTab.rewards)
@@ -38,26 +38,26 @@ struct ChildDashboardView: View {
         }
         .chorraTabBar()
         .background(Color.chorraBackground)
-        .alert("Redeem reward?", isPresented: redeemConfirmationBinding, presenting: rewardToRedeem) { item in
-            Button("Redeem for \(item.reward.pointCost) pts") {
+        .alert("Unlock reward?", isPresented: unlockConfirmationBinding, presenting: rewardToUnlock) { item in
+            Button("Unlock for \(item.reward.pointCost) pts") {
                 Task { await appModel.redeemReward(item.reward) }
             }
             .disabled(appModel.isWorking)
 
             Button("Cancel", role: .cancel) {
-                rewardToRedeem = nil
+                rewardToUnlock = nil
             }
         } message: { item in
             Text(item.reward.name)
         }
     }
 
-    private var redeemConfirmationBinding: Binding<Bool> {
+    private var unlockConfirmationBinding: Binding<Bool> {
         Binding {
-            rewardToRedeem != nil
+            rewardToUnlock != nil
         } set: { isPresented in
             if !isPresented {
-                rewardToRedeem = nil
+                rewardToUnlock = nil
             }
         }
     }
@@ -193,7 +193,11 @@ private struct ChildHomeTab: View {
 private struct ChildRewardsTab: View {
     @EnvironmentObject private var appModel: AppViewModel
     let data: ChildDashboardData
-    @Binding var rewardToRedeem: RewardItem?
+    @Binding var rewardToUnlock: RewardItem?
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
 
     var body: some View {
         ChildTabContainer(title: "Rewards") {
@@ -204,15 +208,31 @@ private struct ChildRewardsTab: View {
                     ChorraEmptyState(title: "No rewards available", systemImage: "gift")
                 }
             } else {
-                ForEach(data.rewards) { item in
-                    ChorraCard {
-                        ChildRewardRowView(
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(data.rewards) { item in
+                        ChildRewardCardView(
                             item: item,
                             balance: data.balance?.points ?? 0
                         ) {
-                            rewardToRedeem = item
+                            rewardToUnlock = item
                         }
                         .disabled(appModel.isWorking)
+                    }
+                }
+            }
+
+            ChorraSectionHeader(title: "Reward history")
+
+            ChorraCard {
+                if data.redemptions.isEmpty {
+                    ChorraEmptyState(title: "No rewards unlocked yet", systemImage: "clock")
+                } else {
+                    ForEach(Array(data.redemptions.enumerated()), id: \.element.id) { index, item in
+                        RewardRedemptionRowView(item: item, showsChild: false)
+
+                        if index < data.redemptions.count - 1 {
+                            ChorraDivider()
+                        }
                     }
                 }
             }
@@ -220,49 +240,49 @@ private struct ChildRewardsTab: View {
     }
 }
 
-private struct ChildRewardRowView: View {
+private struct ChildRewardCardView: View {
     let item: RewardItem
     let balance: Int
-    let onRedeem: () -> Void
+    let onUnlock: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RewardThumbnailView(url: item.signedImageURL, size: 64)
+        VStack(spacing: 8) {
+            Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text(item.reward.name)
-                    .font(.headline)
-                    .foregroundStyle(Color.chorraTextPrimary)
+            RewardEmojiView(emoji: item.reward.emoji, size: 52)
 
-                if let description = item.reward.description, !description.isEmpty {
-                    Text(description)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.chorraTextSecondary)
-                }
+            Text(item.reward.name)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(Color.chorraTextPrimary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
 
-                HStack {
-                    Text("\(item.reward.pointCost) pts")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(canRedeem ? Color.chorraPrimary : Color.chorraTextSecondary)
+            Text("\(item.reward.pointCost) pts")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(canUnlock ? Color.chorraPrimary : Color.chorraTextSecondary)
 
-                    if !canRedeem {
-                        Text("\(item.reward.pointCost - balance) more needed")
-                            .font(.caption)
-                            .foregroundStyle(Color.chorraTextSecondary)
-                    }
-                }
-
-                Button("Redeem") {
-                    onRedeem()
-                }
-                .buttonStyle(ChorraSecondaryButtonStyle())
-                .disabled(!canRedeem)
+            Button("Unlock") {
+                onUnlock()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(ChorraSecondaryButtonStyle())
+            .disabled(!canUnlock)
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(Color.chorraSoftSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
 
-    private var canRedeem: Bool {
+    private var canUnlock: Bool {
         balance >= item.reward.pointCost
     }
 }
@@ -304,7 +324,7 @@ private struct ChildTaskCardView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(style.background)
+        .background(PastelCardColor.color(from: item.task.cardColorHex))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
@@ -331,43 +351,35 @@ private struct ChildTaskCardView: View {
 
 private struct ChildTaskCardStyle {
     let systemImage: String
-    let background: Color
     let iconColor: Color
 
     static let all: [ChildTaskCardStyle] = [
         ChildTaskCardStyle(
             systemImage: "fork.knife",
-            background: Color(red: 0.86, green: 0.97, blue: 0.68),
             iconColor: Color(red: 0.36, green: 0.55, blue: 0.16)
         ),
         ChildTaskCardStyle(
             systemImage: "square.grid.2x2.fill",
-            background: Color(red: 0.78, green: 0.94, blue: 0.90),
             iconColor: Color(red: 0.17, green: 0.48, blue: 0.50)
         ),
         ChildTaskCardStyle(
             systemImage: "bed.double.fill",
-            background: Color(red: 1.00, green: 0.88, blue: 0.68),
             iconColor: Color(red: 0.37, green: 0.30, blue: 0.70)
         ),
         ChildTaskCardStyle(
             systemImage: "dollarsign.circle.fill",
-            background: Color(red: 0.98, green: 0.80, blue: 0.94),
             iconColor: Color(red: 0.73, green: 0.42, blue: 0.12)
         ),
         ChildTaskCardStyle(
             systemImage: "sparkles",
-            background: Color(red: 0.87, green: 0.80, blue: 0.98),
             iconColor: Color(red: 0.43, green: 0.30, blue: 0.78)
         ),
         ChildTaskCardStyle(
             systemImage: "star.fill",
-            background: Color(red: 1.00, green: 0.95, blue: 0.43),
             iconColor: Color(red: 0.86, green: 0.49, blue: 0.05)
         ),
         ChildTaskCardStyle(
             systemImage: "paintbrush.pointed.fill",
-            background: Color(red: 0.80, green: 0.90, blue: 0.99),
             iconColor: Color(red: 0.18, green: 0.39, blue: 0.70)
         )
     ]
@@ -744,7 +756,7 @@ private final class TaskCameraPreviewView: UIView {
 }
 
 #Preview("Child Rewards") {
-    ChildRewardsTab(data: .preview, rewardToRedeem: .constant(nil))
+    ChildRewardsTab(data: .preview, rewardToUnlock: .constant(nil))
         .environmentObject(AppViewModel())
 }
 
@@ -773,6 +785,7 @@ private extension ChildDashboardData {
             title: "Tidy bedroom",
             description: "Make the bed and put clothes away.",
             pointValue: 10,
+            cardColorHex: PastelCardColor.fallbackHex,
             status: .assigned,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -790,9 +803,8 @@ private extension ChildDashboardData {
             householdId: householdId,
             createdBy: UUID(),
             name: "Extra screen time",
-            description: "20 minutes after dinner.",
+            emoji: "🎮",
             pointCost: 25,
-            imageStoragePath: nil,
             isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -804,9 +816,8 @@ private extension ChildDashboardData {
             rewardId: reward.id,
             redeemedBy: child.id,
             rewardName: "Sticker pack",
-            rewardDescription: nil,
+            rewardEmoji: "⭐️",
             rewardPointCost: 12,
-            rewardImageStoragePath: nil,
             redeemedAt: "2026-05-29"
         )
 
@@ -839,8 +850,8 @@ private extension ChildDashboardData {
                     createdAt: "2026-05-29"
                 )
             ],
-            rewards: [RewardItem(reward: reward, signedImageURL: nil)],
-            redemptions: [RewardRedemptionItem(redemption: redemption, child: nil, signedImageURL: nil)]
+            rewards: [RewardItem(reward: reward)],
+            redemptions: [RewardRedemptionItem(redemption: redemption, child: nil)]
         )
     }
 }

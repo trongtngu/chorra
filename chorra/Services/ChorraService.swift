@@ -27,12 +27,6 @@ struct ChildDashboardData: Hashable {
     let redemptions: [RewardRedemptionItem]
 }
 
-enum RewardImageUpdate: Hashable {
-    case keep
-    case remove
-    case replace(Data)
-}
-
 final class ChorraService {
     let client: SupabaseClient
 
@@ -113,13 +107,20 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
-    func createAssignedTask(childId: UUID, title: String, description: String, pointValue: Int) async throws -> ParentDashboardData {
+    func createAssignedTask(
+        childId: UUID,
+        title: String,
+        description: String,
+        pointValue: Int,
+        cardColorHex: String
+    ) async throws -> ParentDashboardData {
         let _: TaskAssignment = try await client
             .rpc("create_assigned_task", params: CreateAssignedTaskParams(
                 pChildId: childId,
                 pTitle: title,
                 pDescription: description,
-                pPointValue: pointValue
+                pPointValue: pointValue,
+                pCardColorHex: cardColorHex
             ))
             .execute()
             .value
@@ -168,31 +169,19 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
-    func createReward(name: String, description: String, pointCost: Int, jpegData: Data?) async throws -> ParentDashboardData {
+    func createReward(name: String, emoji: String, pointCost: Int) async throws -> ParentDashboardData {
         let profile = try await fetchCurrentProfile()
         guard profile.role == .parent else {
             throw ChorraServiceError.unexpectedRole
         }
 
         let rewardId = UUID()
-        let imageStoragePath: String?
-
-        if let jpegData {
-            imageStoragePath = try await uploadRewardImage(
-                householdId: profile.householdId,
-                rewardId: rewardId,
-                jpegData: jpegData
-            )
-        } else {
-            imageStoragePath = nil
-        }
 
         let _: Reward = try await client
             .rpc("create_reward", params: CreateRewardParams(
                 pName: name,
-                pDescription: description,
+                pEmoji: emoji,
                 pPointCost: pointCost,
-                pImageStoragePath: imageStoragePath,
                 pRewardId: rewardId
             ))
             .execute()
@@ -204,32 +193,15 @@ final class ChorraService {
     func updateReward(
         reward: Reward,
         name: String,
-        description: String,
-        pointCost: Int,
-        imageUpdate: RewardImageUpdate
+        emoji: String,
+        pointCost: Int
     ) async throws -> ParentDashboardData {
-        let imageStoragePath: String?
-
-        switch imageUpdate {
-        case .keep:
-            imageStoragePath = reward.imageStoragePath
-        case .remove:
-            imageStoragePath = nil
-        case .replace(let jpegData):
-            imageStoragePath = try await uploadRewardImage(
-                householdId: reward.householdId,
-                rewardId: reward.id,
-                jpegData: jpegData
-            )
-        }
-
         let _: Reward = try await client
             .rpc("update_reward", params: UpdateRewardParams(
                 pRewardId: reward.id,
                 pName: name,
-                pDescription: description,
-                pPointCost: pointCost,
-                pImageStoragePath: imageStoragePath
+                pEmoji: emoji,
+                pPointCost: pointCost
             ))
             .execute()
             .value
@@ -259,30 +231,6 @@ final class ChorraService {
         try await client.storage
             .from("task-photos")
             .createSignedURL(path: path, expiresIn: 60 * 10)
-    }
-
-    func signedRewardImageURL(path: String) async throws -> URL {
-        try await client.storage
-            .from("reward-images")
-            .createSignedURL(path: path, expiresIn: 60 * 10)
-    }
-
-    private func uploadRewardImage(householdId: UUID, rewardId: UUID, jpegData: Data) async throws -> String {
-        let storagePath = "\(householdId.uuidString)/\(rewardId.uuidString)/\(UUID().uuidString).jpg"
-
-        try await client.storage
-            .from("reward-images")
-            .upload(
-                storagePath,
-                data: jpegData,
-                options: FileOptions(
-                    cacheControl: "3600",
-                    contentType: "image/jpeg",
-                    upsert: false
-                )
-            )
-
-        return storagePath
     }
 
     private func loadCurrentParentDashboard() async throws -> ParentDashboardData {
@@ -499,7 +447,7 @@ final class ChorraService {
 
     private func buildRewardItems(rewards: [Reward]) -> [RewardItem] {
         rewards
-            .map { RewardItem(reward: $0, signedImageURL: nil) }
+            .map { RewardItem(reward: $0) }
             .sorted { $0.reward.createdAt > $1.reward.createdAt }
     }
 
@@ -510,8 +458,7 @@ final class ChorraService {
             .map { redemption in
                 RewardRedemptionItem(
                     redemption: redemption,
-                    child: childrenById[redemption.childId],
-                    signedImageURL: nil
+                    child: childrenById[redemption.childId]
                 )
             }
             .sorted { $0.redemption.redeemedAt > $1.redemption.redeemedAt }
@@ -574,12 +521,14 @@ private struct CreateAssignedTaskParams: Encodable {
     let pTitle: String
     let pDescription: String
     let pPointValue: Int
+    let pCardColorHex: String
 
     enum CodingKeys: String, CodingKey {
         case pChildId = "p_child_id"
         case pTitle = "p_title"
         case pDescription = "p_description"
         case pPointValue = "p_point_value"
+        case pCardColorHex = "p_card_color_hex"
     }
 }
 
@@ -609,16 +558,14 @@ private struct ReviewTaskSubmissionParams: Encodable {
 
 private struct CreateRewardParams: Encodable {
     let pName: String
-    let pDescription: String
+    let pEmoji: String
     let pPointCost: Int
-    let pImageStoragePath: String?
     let pRewardId: UUID
 
     enum CodingKeys: String, CodingKey {
         case pName = "p_name"
-        case pDescription = "p_description"
+        case pEmoji = "p_emoji"
         case pPointCost = "p_point_cost"
-        case pImageStoragePath = "p_image_storage_path"
         case pRewardId = "p_reward_id"
     }
 }
@@ -626,16 +573,14 @@ private struct CreateRewardParams: Encodable {
 private struct UpdateRewardParams: Encodable {
     let pRewardId: UUID
     let pName: String
-    let pDescription: String
+    let pEmoji: String
     let pPointCost: Int
-    let pImageStoragePath: String?
 
     enum CodingKeys: String, CodingKey {
         case pRewardId = "p_reward_id"
         case pName = "p_name"
-        case pDescription = "p_description"
+        case pEmoji = "p_emoji"
         case pPointCost = "p_point_cost"
-        case pImageStoragePath = "p_image_storage_path"
     }
 }
 

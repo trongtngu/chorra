@@ -153,7 +153,7 @@ Approval records the parent's review decision. An approved submission completes 
 
 ### Points Ledger
 
-The points ledger records every points change for a child. The MVP should create positive ledger entries when a parent approves a task. Manual adjustments, redemptions, and allowance conversion are deferred.
+The points ledger records every points change for a child. The MVP should create positive ledger entries when a parent approves a task. Reward unlocks reduce the derived balance through reward redemption rows. Manual adjustments and allowance conversion are deferred.
 
 ## Task States
 
@@ -193,14 +193,14 @@ Each task has a point value set by the parent. The child does not receive points
 
 The MVP should show each child a current points balance and enough history to understand which completed tasks earned points.
 
-Parents can also maintain a household reward catalog. A reward has a name, optional description, point cost, and optional image. Children can redeem active rewards immediately when they have enough points, and redemptions reduce the derived point balance while preserving a redemption history for both parent and child.
+Parents can also maintain a household reward catalog. A reward has an emoji, name, and point cost. Children can unlock active rewards immediately when they have enough points, and unlocks reduce the derived point balance while preserving a reward history for both parent and child.
 
 Deferred reward features:
 
 - Money allowance.
 - Payments.
 - Marketplace redemption.
-- Parent approval before reward redemption.
+- Parent approval before reward unlock.
 - Point expiration.
 - Negative adjustments.
 - Multi-currency or cash conversion.
@@ -224,8 +224,8 @@ Included:
 - Award points after approval.
 - Child points balance.
 - Parent-defined reward catalog.
-- Child reward redemption.
-- Parent and child redemption history.
+- Child reward unlock.
+- Parent and child reward history.
 
 Deferred:
 
@@ -296,7 +296,7 @@ These are intentionally deferred until the core loop is working:
 
 - Whether rewards convert to real money.
 - Whether parents can define a reward catalog.
-- Whether children can redeem points.
+- Whether children can unlock rewards with points.
 - Whether tasks can repeat automatically.
 - Whether households can have multiple parents.
 - Whether tasks can be shared by multiple children.

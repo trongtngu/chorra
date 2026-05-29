@@ -111,6 +111,7 @@ struct ChorraTask: Codable, Identifiable, Hashable {
     let description: String?
     let pointValue: Int
     let cardColorHex: String
+    let iconName: String
     let status: TaskStatus
     let createdAt: String
     let updatedAt: String
@@ -123,6 +124,7 @@ struct ChorraTask: Codable, Identifiable, Hashable {
         case description
         case pointValue = "point_value"
         case cardColorHex = "card_color_hex"
+        case iconName = "icon_name"
         case status
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -240,8 +242,9 @@ struct Reward: Codable, Identifiable, Hashable {
     let householdId: UUID
     let createdBy: UUID
     let name: String
-    let emoji: String
+    let iconName: String
     let pointCost: Int
+    let cardColorHex: String
     let isArchived: Bool
     let createdAt: String
     let updatedAt: String
@@ -251,8 +254,9 @@ struct Reward: Codable, Identifiable, Hashable {
         case householdId = "household_id"
         case createdBy = "created_by"
         case name
-        case emoji
+        case iconName = "icon_name"
         case pointCost = "point_cost"
+        case cardColorHex = "card_color_hex"
         case isArchived = "is_archived"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -266,7 +270,7 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
     let rewardId: UUID
     let redeemedBy: UUID
     let rewardName: String
-    let rewardEmoji: String
+    let rewardIconName: String
     let rewardPointCost: Int
     let redeemedAt: String
 
@@ -277,7 +281,7 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
         case rewardId = "reward_id"
         case redeemedBy = "redeemed_by"
         case rewardName = "reward_name"
-        case rewardEmoji = "reward_emoji"
+        case rewardIconName = "reward_icon_name"
         case rewardPointCost = "reward_point_cost"
         case redeemedAt = "redeemed_at"
     }

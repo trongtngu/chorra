@@ -189,7 +189,7 @@ private struct ParentHomeTab: View {
                 ChorraStatPill(
                     title: "points",
                     value: "\(totalPoints)",
-                    systemImage: "star.fill"
+                    iconName: ChorraIconCatalog.pointIconName
                 )
             }
 
@@ -250,7 +250,7 @@ private struct ChildSummaryRow: View {
 
             Spacer()
 
-            Text("\(points) pts")
+            ChorraPointAmountLabel(amount: points, iconSize: 15)
                 .font(.headline.weight(.bold))
                 .foregroundStyle(Color.chorraPrimary)
         }
@@ -351,6 +351,13 @@ private struct ParentTaskRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
+                ChorraIconView(
+                    iconName: item.task.iconName,
+                    size: 46,
+                    background: .clear,
+                    padding: 7
+                )
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.task.title)
                         .font(.headline)
@@ -362,7 +369,11 @@ private struct ParentTaskRowView: View {
                             .foregroundStyle(Color.chorraTextSecondary)
                     }
 
-                    Label(taskMeta, systemImage: "star.fill")
+                    HStack(spacing: 4) {
+                        Text(childName)
+                        Text("·")
+                        ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 11)
+                    }
                         .font(.caption)
                         .foregroundStyle(Color.chorraTextSecondary)
                 }
@@ -425,9 +436,8 @@ private struct ParentTaskRowView: View {
         }
     }
 
-    private var taskMeta: String {
-        let childName = item.child?.displayName ?? "Unassigned"
-        return "\(childName) · \(item.task.pointValue) pts"
+    private var childName: String {
+        item.child?.displayName ?? "Unassigned"
     }
 
     private var statusColor: Color {
@@ -452,11 +462,11 @@ private struct ParentRewardCardView: View {
     let onEdit: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        Button(action: onEdit) {
             VStack(spacing: 8) {
                 Spacer(minLength: 0)
 
-                RewardEmojiView(emoji: item.reward.emoji, size: 50)
+                ChorraIconView(iconName: item.reward.iconName, size: 58)
 
                 Text(item.reward.name)
                     .font(.headline.weight(.semibold))
@@ -466,43 +476,25 @@ private struct ParentRewardCardView: View {
                     .minimumScaleFactor(0.85)
                     .frame(maxWidth: .infinity)
 
-                Text("\(item.reward.pointCost) pts")
+                ChorraPointAmountLabel(amount: item.reward.pointCost, iconSize: 12)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.chorraPrimary)
 
                 Spacer(minLength: 0)
             }
             .padding(12)
-
-            Menu {
-                Button {
-                    onEdit()
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-
-                Button(role: .destructive) {
-                    Task { await appModel.archiveReward(item.reward) }
-                } label: {
-                    Label("Archive", systemImage: "archivebox")
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle.fill")
-                    .font(.title3)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.chorraTextSecondary)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            .background(PastelCardColor.color(from: item.reward.cardColorHex))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.chorraBorder, lineWidth: 1)
             }
-            .disabled(appModel.isWorking)
-            .padding(10)
         }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
-        .background(Color.chorraSoftSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.chorraBorder, lineWidth: 1)
-        }
+        .buttonStyle(.plain)
+        .disabled(appModel.isWorking)
     }
 }
 
@@ -512,7 +504,7 @@ struct RewardRedemptionRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            RewardEmojiView(emoji: item.redemption.rewardEmoji, size: 28)
+            ChorraIconView(iconName: item.redemption.rewardIconName, size: 36, padding: 6)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.redemption.rewardName)
@@ -526,7 +518,7 @@ struct RewardRedemptionRowView: View {
                 }
 
                 HStack {
-                    Text("-\(item.redemption.rewardPointCost) pts")
+                    ChorraPointAmountLabel(amount: -item.redemption.rewardPointCost, iconSize: 11)
                     Text(item.redemption.redeemedAt)
                 }
                 .font(.caption)
@@ -534,23 +526,6 @@ struct RewardRedemptionRowView: View {
             }
         }
         .padding(.vertical, 2)
-    }
-}
-
-struct RewardEmojiView: View {
-    let emoji: String
-    let size: CGFloat
-
-    var body: some View {
-        Text(displayEmoji)
-            .font(.system(size: size))
-            .frame(width: size * 1.7, height: size * 1.7)
-            .background(Color.chorraSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var displayEmoji: String {
-        emoji.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "🎁"
     }
 }
 
@@ -619,15 +594,23 @@ private struct CreateTaskView: View {
     @State private var title = ""
     @State private var description = ""
     @State private var pointValue = 5
-    @State private var cardColorHex = PastelCardColor.randomHex()
+    @State private var cardColorHex = PastelCardColor.defaultHex
+    @State private var iconName = ChorraIconCatalog.defaultIconName
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Task") {
+                    CardColorPalettePicker(selectedHex: $cardColorHex)
                     TextField("Title", text: $title)
                     TextField("Description", text: $description, axis: .vertical)
-                    Stepper("\(pointValue) pts", value: $pointValue, in: 1...500)
+                    Stepper(value: $pointValue, in: 1...500) {
+                        ChorraPointAmountLabel(amount: pointValue, iconSize: 16)
+                    }
+                }
+
+                Section("Icon") {
+                    IconPickerPanel(selectedIconName: $iconName)
                 }
 
                 Section("Assign to") {
@@ -665,7 +648,8 @@ private struct CreateTaskView: View {
                                 title: title,
                                 description: description,
                                 pointValue: pointValue,
-                                cardColorHex: cardColorHex
+                                cardColorHex: cardColorHex,
+                                iconName: iconName
                             )
                             if appModel.errorMessage == nil {
                                 dismiss()
@@ -692,24 +676,54 @@ private struct RewardFormView: View {
     let reward: Reward?
 
     @State private var name: String
-    @State private var emoji: String
+    @State private var iconName: String
     @State private var pointCost: Int
+    @State private var cardColorHex: String
+    @State private var showingArchiveConfirmation = false
 
     init(item: RewardItem?) {
         reward = item?.reward
         _name = State(initialValue: item?.reward.name ?? "")
-        _emoji = State(initialValue: item?.reward.emoji ?? "🎁")
+        _iconName = State(
+            initialValue: ChorraIconCatalog.normalizedSelectableIconName(
+                item?.reward.iconName ?? ChorraIconCatalog.defaultIconName
+            )
+        )
         _pointCost = State(initialValue: item?.reward.pointCost ?? 25)
+        _cardColorHex = State(
+            initialValue: PastelCardColor.normalizedPaletteHex(
+                item?.reward.cardColorHex ?? PastelCardColor.defaultHex
+            )
+        )
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Reward") {
-                    TextField("Emoji", text: $emoji)
-                        .font(.title2)
                     TextField("Name", text: $name)
-                    Stepper("\(pointCost) pts", value: $pointCost, in: 1...100000)
+                    Stepper(value: $pointCost, in: 1...100000) {
+                        ChorraPointAmountLabel(amount: pointCost, iconSize: 16)
+                    }
+                }
+
+                Section("Icon") {
+                    IconPickerPanel(selectedIconName: $iconName)
+                }
+
+                Section("Colour") {
+                    CardColorPalettePicker(selectedHex: $cardColorHex)
+                }
+
+                if reward != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            showingArchiveConfirmation = true
+                        } label: {
+                            Label("Archive reward", systemImage: "archivebox")
+                        }
+                        .disabled(appModel.isWorking)
+                    }
                 }
             }
             .chorraFormBackground()
@@ -735,14 +749,26 @@ private struct RewardFormView: View {
                 }
             }
         }
+        .alert("Archive reward?", isPresented: $showingArchiveConfirmation) {
+            Button("Archive", role: .destructive) {
+                if let reward {
+                    Task {
+                        await appModel.archiveReward(reward)
+                        if appModel.errorMessage == nil {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the reward from the active reward list.")
+        }
     }
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var normalizedEmoji: String {
-        emoji.trimmingCharacters(in: .whitespacesAndNewlines).first.map(String.init) ?? "🎁"
     }
 
     private func save() async {
@@ -750,14 +776,16 @@ private struct RewardFormView: View {
             await appModel.updateReward(
                 reward: reward,
                 name: name,
-                emoji: normalizedEmoji,
-                pointCost: pointCost
+                iconName: iconName,
+                pointCost: pointCost,
+                cardColorHex: cardColorHex
             )
         } else {
             await appModel.createReward(
                 name: name,
-                emoji: normalizedEmoji,
-                pointCost: pointCost
+                iconName: iconName,
+                pointCost: pointCost,
+                cardColorHex: cardColorHex
             )
         }
     }
@@ -800,6 +828,7 @@ private extension ParentDashboardData {
             description: "Put lunchbox, reader, and hat in your bag.",
             pointValue: 8,
             cardColorHex: PastelCardColor.fallbackHex,
+            iconName: ChorraIconCatalog.defaultIconName,
             status: .submitted,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -830,8 +859,9 @@ private extension ParentDashboardData {
             householdId: householdId,
             createdBy: parentId,
             name: "Movie night",
-            emoji: "🎬",
+            iconName: "Icon_Film",
             pointCost: 30,
+            cardColorHex: PastelCardColor.allowedHexes[1],
             isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -843,7 +873,7 @@ private extension ParentDashboardData {
             rewardId: reward.id,
             redeemedBy: child.id,
             rewardName: reward.name,
-            rewardEmoji: reward.emoji,
+            rewardIconName: reward.iconName,
             rewardPointCost: reward.pointCost,
             redeemedAt: "2026-05-29"
         )

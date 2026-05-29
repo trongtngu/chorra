@@ -112,7 +112,8 @@ final class ChorraService {
         title: String,
         description: String,
         pointValue: Int,
-        cardColorHex: String
+        cardColorHex: String,
+        iconName: String
     ) async throws -> ParentDashboardData {
         let _: TaskAssignment = try await client
             .rpc("create_assigned_task", params: CreateAssignedTaskParams(
@@ -120,7 +121,8 @@ final class ChorraService {
                 pTitle: title,
                 pDescription: description,
                 pPointValue: pointValue,
-                pCardColorHex: cardColorHex
+                pCardColorHex: cardColorHex,
+                pIconName: ChorraIconCatalog.normalizedIconName(iconName)
             ))
             .execute()
             .value
@@ -169,7 +171,7 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
-    func createReward(name: String, emoji: String, pointCost: Int) async throws -> ParentDashboardData {
+    func createReward(name: String, iconName: String, pointCost: Int, cardColorHex: String) async throws -> ParentDashboardData {
         let profile = try await fetchCurrentProfile()
         guard profile.role == .parent else {
             throw ChorraServiceError.unexpectedRole
@@ -180,8 +182,9 @@ final class ChorraService {
         let _: Reward = try await client
             .rpc("create_reward", params: CreateRewardParams(
                 pName: name,
-                pEmoji: emoji,
+                pIconName: ChorraIconCatalog.normalizedIconName(iconName),
                 pPointCost: pointCost,
+                pCardColorHex: cardColorHex,
                 pRewardId: rewardId
             ))
             .execute()
@@ -193,15 +196,17 @@ final class ChorraService {
     func updateReward(
         reward: Reward,
         name: String,
-        emoji: String,
-        pointCost: Int
+        iconName: String,
+        pointCost: Int,
+        cardColorHex: String
     ) async throws -> ParentDashboardData {
         let _: Reward = try await client
             .rpc("update_reward", params: UpdateRewardParams(
                 pRewardId: reward.id,
                 pName: name,
-                pEmoji: emoji,
-                pPointCost: pointCost
+                pIconName: ChorraIconCatalog.normalizedIconName(iconName),
+                pPointCost: pointCost,
+                pCardColorHex: cardColorHex
             ))
             .execute()
             .value
@@ -522,6 +527,7 @@ private struct CreateAssignedTaskParams: Encodable {
     let pDescription: String
     let pPointValue: Int
     let pCardColorHex: String
+    let pIconName: String
 
     enum CodingKeys: String, CodingKey {
         case pChildId = "p_child_id"
@@ -529,6 +535,7 @@ private struct CreateAssignedTaskParams: Encodable {
         case pDescription = "p_description"
         case pPointValue = "p_point_value"
         case pCardColorHex = "p_card_color_hex"
+        case pIconName = "p_icon_name"
     }
 }
 
@@ -558,14 +565,16 @@ private struct ReviewTaskSubmissionParams: Encodable {
 
 private struct CreateRewardParams: Encodable {
     let pName: String
-    let pEmoji: String
+    let pIconName: String
     let pPointCost: Int
+    let pCardColorHex: String
     let pRewardId: UUID
 
     enum CodingKeys: String, CodingKey {
         case pName = "p_name"
-        case pEmoji = "p_emoji"
+        case pIconName = "p_icon_name"
         case pPointCost = "p_point_cost"
+        case pCardColorHex = "p_card_color_hex"
         case pRewardId = "p_reward_id"
     }
 }
@@ -573,14 +582,16 @@ private struct CreateRewardParams: Encodable {
 private struct UpdateRewardParams: Encodable {
     let pRewardId: UUID
     let pName: String
-    let pEmoji: String
+    let pIconName: String
     let pPointCost: Int
+    let pCardColorHex: String
 
     enum CodingKeys: String, CodingKey {
         case pRewardId = "p_reward_id"
         case pName = "p_name"
-        case pEmoji = "p_emoji"
+        case pIconName = "p_icon_name"
         case pPointCost = "p_point_cost"
+        case pCardColorHex = "p_card_color_hex"
     }
 }
 

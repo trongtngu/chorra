@@ -243,14 +243,73 @@ struct ChorraPill: View {
     }
 }
 
+struct ChorraPointAmountLabel: View {
+    let amount: Int
+    var iconSize: CGFloat = 14
+    var iconPadding: CGFloat = 0
+    var spacing: CGFloat = 4
+
+    init(_ amount: Int, iconSize: CGFloat = 14, iconPadding: CGFloat = 0, spacing: CGFloat = 4) {
+        self.amount = amount
+        self.iconSize = iconSize
+        self.iconPadding = iconPadding
+        self.spacing = spacing
+    }
+
+    init(amount: Int, iconSize: CGFloat = 14, iconPadding: CGFloat = 0, spacing: CGFloat = 4) {
+        self.init(amount, iconSize: iconSize, iconPadding: iconPadding, spacing: spacing)
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: spacing) {
+            ChorraIconView(
+                iconName: ChorraIconCatalog.pointIconName,
+                size: iconSize,
+                padding: iconPadding
+            )
+            .accessibilityHidden(true)
+
+            Text("\(amount)")
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        let unit = abs(amount) == 1 ? "point" : "points"
+        return "\(amount) \(unit)"
+    }
+}
+
 struct ChorraStatPill: View {
     let title: String
     let value: String
-    let systemImage: String
+    let systemImage: String?
+    let iconName: String?
+
+    init(title: String, value: String, systemImage: String) {
+        self.title = title
+        self.value = value
+        self.systemImage = systemImage
+        iconName = nil
+    }
+
+    init(title: String, value: String, iconName: String) {
+        self.title = title
+        self.value = value
+        systemImage = nil
+        self.iconName = iconName
+    }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: systemImage)
+            if let iconName {
+                ChorraIconView(iconName: iconName, size: 18, padding: 0)
+                    .accessibilityHidden(true)
+            } else if let systemImage {
+                Image(systemName: systemImage)
+            }
+
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
                     .font(.headline.weight(.bold))

@@ -98,7 +98,8 @@ final class AppViewModel: ObservableObject {
         title: String,
         description: String,
         pointValue: Int,
-        cardColorHex: String
+        cardColorHex: String,
+        iconName: String
     ) async {
         await run {
             let data = try await serviceOrThrow().createAssignedTask(
@@ -106,7 +107,8 @@ final class AppViewModel: ObservableObject {
                 title: title,
                 description: description,
                 pointValue: pointValue,
-                cardColorHex: cardColorHex
+                cardColorHex: cardColorHex,
+                iconName: iconName
             )
             session = .parent(try await decorate(data))
         }
@@ -131,12 +133,13 @@ final class AppViewModel: ObservableObject {
         await review(submission, decision: .rejected, rejectionReason: reason)
     }
 
-    func createReward(name: String, emoji: String, pointCost: Int) async {
+    func createReward(name: String, iconName: String, pointCost: Int, cardColorHex: String) async {
         await run {
             let data = try await serviceOrThrow().createReward(
                 name: name,
-                emoji: emoji,
-                pointCost: pointCost
+                iconName: iconName,
+                pointCost: pointCost,
+                cardColorHex: cardColorHex
             )
             session = .parent(try await decorate(data))
         }
@@ -145,15 +148,17 @@ final class AppViewModel: ObservableObject {
     func updateReward(
         reward: Reward,
         name: String,
-        emoji: String,
-        pointCost: Int
+        iconName: String,
+        pointCost: Int,
+        cardColorHex: String
     ) async {
         await run {
             let data = try await serviceOrThrow().updateReward(
                 reward: reward,
                 name: name,
-                emoji: emoji,
-                pointCost: pointCost
+                iconName: iconName,
+                pointCost: pointCost,
+                cardColorHex: cardColorHex
             )
             session = .parent(try await decorate(data))
         }

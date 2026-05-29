@@ -16,6 +16,7 @@ struct ChildDashboardView: View {
 
     @State private var selectedTab: ChildDashboardTab = .home
     @State private var rewardToUnlock: RewardItem?
+    @State private var rewardWithoutEnoughPoints: RewardItem?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -28,7 +29,8 @@ struct ChildDashboardView: View {
 
             ChildRewardsTab(
                 data: data,
-                rewardToUnlock: $rewardToUnlock
+                rewardToUnlock: $rewardToUnlock,
+                rewardWithoutEnoughPoints: $rewardWithoutEnoughPoints
             )
             .environmentObject(appModel)
             .tag(ChildDashboardTab.rewards)
@@ -38,28 +40,43 @@ struct ChildDashboardView: View {
         }
         .chorraTabBar()
         .background(Color.chorraBackground)
-        .alert("Unlock reward?", isPresented: unlockConfirmationBinding, presenting: rewardToUnlock) { item in
-            Button("Unlock for \(item.reward.pointCost) pts") {
-                Task { await appModel.redeemReward(item.reward) }
-            }
-            .disabled(appModel.isWorking)
+        .overlay {
+            if let rewardToUnlock {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
 
-            Button("Cancel", role: .cancel) {
-                rewardToUnlock = nil
-            }
-        } message: { item in
-            Text(item.reward.name)
-        }
-    }
+                    ChildRewardRedemptionDialog(
+                        item: rewardToUnlock,
+                        isWorking: appModel.isWorking
+                    ) {
+                        Task {
+                            await appModel.redeemReward(rewardToUnlock.reward)
+                            self.rewardToUnlock = nil
+                        }
+                    } onCancel: {
+                        self.rewardToUnlock = nil
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            } else if let rewardWithoutEnoughPoints {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
 
-    private var unlockConfirmationBinding: Binding<Bool> {
-        Binding {
-            rewardToUnlock != nil
-        } set: { isPresented in
-            if !isPresented {
-                rewardToUnlock = nil
+                    ChildRewardNotEnoughPointsDialog(
+                        item: rewardWithoutEnoughPoints
+                    ) {
+                        self.rewardWithoutEnoughPoints = nil
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: rewardToUnlock?.id)
+        .animation(.easeInOut(duration: 0.18), value: rewardWithoutEnoughPoints?.id)
     }
 }
 
@@ -130,9 +147,13 @@ private struct ChildHomeTab: View {
 
     var body: some View {
         ChildTabContainer(title: "Home") {
-            pointsHeroCard
+            VStack(alignment: .leading, spacing: 0) {
+                pointsHeroCard
 
-            ChorraSectionHeader(title: "Tasks")
+                ChorraSectionHeader(title: "Tasks")
+                    .padding(.top, -4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if incompleteTasks.isEmpty {
                 ChorraCard {
@@ -153,47 +174,27 @@ private struct ChildHomeTab: View {
     }
 
     private var pointsHeroCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("\(data.balance?.points ?? 0)")
-                    .font(.system(size: 58, weight: .black, design: .rounded))
-                    .foregroundStyle(Color.chorraSurface)
-
-                Text((data.balance?.points ?? 0) == 1 ? "point" : "points")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Color.chorraSurface.opacity(0.88))
-            }
-
-            Text(tasksAssignedText)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.chorraSurface.opacity(0.74))
+        VStack(spacing: 8) {
+            ChorraPointAmountLabel(amount: data.balance?.points ?? 0, iconSize: 42, spacing: 10)
+                .font(.system(size: 58, weight: .black, design: .rounded))
+                .foregroundStyle(Color.chorraTextPrimary)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            LinearGradient(
-                colors: [Color.chorraPrimary, Color.chorraPrimaryDark],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .padding(.vertical, 22)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var incompleteTasks: [ChildTaskItem] {
         data.tasks.filter { $0.task.status == .assigned || $0.task.status == .rejected }
     }
 
-    private var tasksAssignedText: String {
-        let count = incompleteTasks.count
-        return "\(count) \(count == 1 ? "task" : "tasks") assigned"
-    }
 }
 
 private struct ChildRewardsTab: View {
     @EnvironmentObject private var appModel: AppViewModel
     let data: ChildDashboardData
     @Binding var rewardToUnlock: RewardItem?
+    @Binding var rewardWithoutEnoughPoints: RewardItem?
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12)
@@ -214,7 +215,11 @@ private struct ChildRewardsTab: View {
                             item: item,
                             balance: data.balance?.points ?? 0
                         ) {
-                            rewardToUnlock = item
+                            if (data.balance?.points ?? 0) >= item.reward.pointCost {
+                                rewardToUnlock = item
+                            } else {
+                                rewardWithoutEnoughPoints = item
+                            }
                         }
                         .disabled(appModel.isWorking)
                     }
@@ -228,47 +233,157 @@ private struct ChildRewardsTab: View {
 private struct ChildRewardCardView: View {
     let item: RewardItem
     let balance: Int
-    let onUnlock: () -> Void
+    let onTap: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            Spacer(minLength: 0)
+        Button(action: onTap) {
+            VStack(spacing: 8) {
+                Spacer(minLength: 0)
 
-            RewardEmojiView(emoji: item.reward.emoji, size: 52)
+                ChorraIconView(iconName: item.reward.iconName, size: 60)
 
-            Text(item.reward.name)
-                .font(.headline.weight(.semibold))
+                Text(item.reward.name)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                    .frame(maxWidth: .infinity)
+
+                ChorraPointAmountLabel(amount: item.reward.pointCost, iconSize: 12)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(canUnlock ? Color.chorraPrimary : Color.chorraTextSecondary)
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+            .background(PastelCardColor.color(from: item.reward.cardColorHex))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.chorraBorder, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var canUnlock: Bool {
+        balance >= item.reward.pointCost
+    }
+}
+
+private struct ChildRewardNotEnoughPointsDialog: View {
+    let item: RewardItem
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack {
+                Spacer()
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.chorraSoftSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            }
+
+            ChorraIconView(iconName: item.reward.iconName, size: 64)
+
+            Text("Earn more points to unlock reward!")
+                .font(.title3.weight(.bold))
                 .foregroundStyle(Color.chorraTextPrimary)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.85)
-                .frame(maxWidth: .infinity)
 
-            Text("\(item.reward.pointCost) pts")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(canUnlock ? Color.chorraPrimary : Color.chorraTextSecondary)
-
-            Button("Unlock") {
-                onUnlock()
+            Button(action: onClose) {
+                Text("Ok")
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(ChorraSecondaryButtonStyle())
-            .disabled(!canUnlock)
-
-            Spacer(minLength: 0)
+            .buttonStyle(ChorraPrimaryButtonStyle())
         }
-        .padding(12)
-        .frame(maxWidth: .infinity)
-        .aspectRatio(1, contentMode: .fit)
-        .background(Color.chorraSoftSurface)
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
+}
 
-    private var canUnlock: Bool {
-        balance >= item.reward.pointCost
+private struct ChildRewardRedemptionDialog: View {
+    let item: RewardItem
+    let isWorking: Bool
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack {
+                Spacer()
+
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.chorraSoftSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            }
+
+            ChorraIconView(iconName: item.reward.iconName, size: 64)
+
+            VStack(spacing: 6) {
+                Text("Do you want to redeem this reward?")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text(item.reward.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextSecondary)
+                    .multilineTextAlignment(.center)
+
+                ChorraPointAmountLabel(amount: item.reward.pointCost, iconSize: 12)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.chorraPrimary)
+            }
+
+            HStack(spacing: 12) {
+                Button(action: onCancel) {
+                    Text("No")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraSecondaryButtonStyle())
+
+                Button(action: onConfirm) {
+                    Text("Yes")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraPrimaryButtonStyle())
+                .disabled(isWorking)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
+        }
     }
 }
 
@@ -277,11 +392,12 @@ private struct ChildTaskCardView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: style.systemImage)
-                .font(.system(size: 26, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(style.iconColor)
-                .frame(width: 44, height: 44)
+            ChorraIconView(
+                iconName: item.task.iconName,
+                size: 46,
+                background: .clear,
+                padding: 7
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.task.title)
@@ -289,7 +405,7 @@ private struct ChildTaskCardView: View {
                     .foregroundStyle(Color.chorraTextPrimary)
                     .lineLimit(2)
 
-                Text(pointValueText)
+                ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
 
@@ -313,10 +429,6 @@ private struct ChildTaskCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
-    private var pointValueText: String {
-        "\(item.task.pointValue) \(item.task.pointValue == 1 ? "point" : "points")"
-    }
-
     private var rejectionText: String? {
         guard let submission = item.latestSubmission, submission.status == .rejected else {
             return nil
@@ -325,49 +437,6 @@ private struct ChildTaskCardView: View {
         return submission.rejectionReason ?? "Needs more work"
     }
 
-    private var style: ChildTaskCardStyle {
-        let indexSeed = item.id.uuidString.unicodeScalars.reduce(0) { partialResult, scalar in
-            partialResult + Int(scalar.value)
-        }
-
-        return ChildTaskCardStyle.all[indexSeed % ChildTaskCardStyle.all.count]
-    }
-}
-
-private struct ChildTaskCardStyle {
-    let systemImage: String
-    let iconColor: Color
-
-    static let all: [ChildTaskCardStyle] = [
-        ChildTaskCardStyle(
-            systemImage: "fork.knife",
-            iconColor: Color(red: 0.36, green: 0.55, blue: 0.16)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "square.grid.2x2.fill",
-            iconColor: Color(red: 0.17, green: 0.48, blue: 0.50)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "bed.double.fill",
-            iconColor: Color(red: 0.37, green: 0.30, blue: 0.70)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "dollarsign.circle.fill",
-            iconColor: Color(red: 0.73, green: 0.42, blue: 0.12)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "sparkles",
-            iconColor: Color(red: 0.43, green: 0.30, blue: 0.78)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "star.fill",
-            iconColor: Color(red: 0.86, green: 0.49, blue: 0.05)
-        ),
-        ChildTaskCardStyle(
-            systemImage: "paintbrush.pointed.fill",
-            iconColor: Color(red: 0.18, green: 0.39, blue: 0.70)
-        )
-    ]
 }
 
 private struct ChildTaskDetailView: View {
@@ -741,7 +810,11 @@ private final class TaskCameraPreviewView: UIView {
 }
 
 #Preview("Child Rewards") {
-    ChildRewardsTab(data: .preview, rewardToUnlock: .constant(nil))
+    ChildRewardsTab(
+        data: .preview,
+        rewardToUnlock: .constant(nil),
+        rewardWithoutEnoughPoints: .constant(nil)
+    )
         .environmentObject(AppViewModel())
 }
 
@@ -771,6 +844,7 @@ private extension ChildDashboardData {
             description: "Make the bed and put clothes away.",
             pointValue: 10,
             cardColorHex: PastelCardColor.fallbackHex,
+            iconName: "Icon_Hanger",
             status: .assigned,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -788,8 +862,9 @@ private extension ChildDashboardData {
             householdId: householdId,
             createdBy: UUID(),
             name: "Extra screen time",
-            emoji: "🎮",
+            iconName: "Icon_Film",
             pointCost: 25,
+            cardColorHex: PastelCardColor.allowedHexes[2],
             isArchived: false,
             createdAt: "2026-05-29",
             updatedAt: "2026-05-29"
@@ -801,7 +876,7 @@ private extension ChildDashboardData {
             rewardId: reward.id,
             redeemedBy: child.id,
             rewardName: "Sticker pack",
-            rewardEmoji: "⭐️",
+            rewardIconName: ChorraIconCatalog.defaultIconName,
             rewardPointCost: 12,
             redeemedAt: "2026-05-29"
         )

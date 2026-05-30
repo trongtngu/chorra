@@ -181,12 +181,18 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func submitTaskCompletion(assignment: TaskAssignment, child: Child, jpegData: Data) async {
+    func submitTaskCompletion(
+        assignment: TaskAssignment,
+        child: Child,
+        taskJPEGData: Data,
+        faceJPEGData: Data
+    ) async {
         await run {
             let data = try await serviceOrThrow().submitTaskCompletion(
                 assignment: assignment,
                 child: child,
-                jpegData: jpegData
+                taskJPEGData: taskJPEGData,
+                faceJPEGData: faceJPEGData
             )
             session = .child(data)
         }
@@ -300,11 +306,13 @@ final class AppViewModel: ObservableObject {
         var reviewItems = data.reviewItems
 
         for index in reviewItems.indices {
-            guard let image = reviewItems[index].image else {
-                continue
+            if let image = reviewItems[index].taskImage {
+                reviewItems[index].signedTaskImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
             }
 
-            reviewItems[index].signedImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
+            if let image = reviewItems[index].faceImage {
+                reviewItems[index].signedFaceImageURL = try? await service.signedTaskPhotoURL(path: image.storagePath)
+            }
         }
 
         return ParentDashboardData(

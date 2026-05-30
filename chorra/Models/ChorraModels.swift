@@ -41,6 +41,11 @@ enum SubmissionStatus: String, Codable, Hashable {
     case rejected
 }
 
+enum TaskSubmissionImageKind: String, Codable, Hashable, CaseIterable {
+    case task
+    case face
+}
+
 enum LedgerReason: String, Codable, Hashable {
     case taskApproved = "task_approved"
 }
@@ -193,6 +198,7 @@ struct TaskSubmissionImage: Codable, Identifiable, Hashable {
     let submissionId: UUID
     let childId: UUID
     let storagePath: String
+    let imageKind: TaskSubmissionImageKind
     let uploadedBy: UUID
     let createdAt: String
 
@@ -202,6 +208,7 @@ struct TaskSubmissionImage: Codable, Identifiable, Hashable {
         case submissionId = "submission_id"
         case childId = "child_id"
         case storagePath = "storage_path"
+        case imageKind = "image_kind"
         case uploadedBy = "uploaded_by"
         case createdAt = "created_at"
     }
@@ -318,8 +325,10 @@ struct ParentTaskReviewItem: Identifiable, Hashable {
     let assignment: TaskAssignment
     let child: Child?
     let latestSubmission: TaskSubmission?
-    let image: TaskSubmissionImage?
-    var signedImageURL: URL?
+    let taskImage: TaskSubmissionImage?
+    let faceImage: TaskSubmissionImage?
+    var signedTaskImageURL: URL?
+    var signedFaceImageURL: URL?
 
     var id: UUID { assignment.id }
 }

@@ -226,7 +226,7 @@ private struct ParentHomeTab: View {
             Button("Delete", role: .destructive) {
                 deletingAssignedTask = nil
                 Task {
-                    awaitsw appModel.archiveTaskAssignment(item.assignment)
+                    await appModel.archiveTaskAssignment(item.assignment)
                 }
             }
 
@@ -843,126 +843,205 @@ private struct ParentTaskReviewSheet: View {
     let item: ParentTaskReviewItem
 
     @State private var rejectionReason = ""
+    @State private var showingRejectDialog = false
+
+    private let photoAspectRatio: CGFloat = 3.0 / 4.0
 
     var body: some View {
-        VStack(spacing: 0) {
-            reviewHeader
+        ZStack {
+            GeometryReader { proxy in
+                let photoWidth = photoWidth(for: proxy.size)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    ParentTaskReviewCardView(item: item)
+                VStack(spacing: 0) {
+                    reviewHeader
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
 
-                    RewardGroupedSection {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Photo proof")
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(Color.chorraTextPrimary)
+                    Spacer(minLength: 18)
 
-                            proofImage
-                        }
-                    }
+                    proofImageSurface
+                        .frame(width: photoWidth, height: photoWidth / photoAspectRatio)
+
+                    Spacer(minLength: 28)
+
+                    reviewControls
+                        .frame(maxWidth: 430)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .scrollContentBackground(.hidden)
+            .background(taskColor.ignoresSafeArea())
+
+            if showingRejectDialog {
+                Color.black.opacity(0.34)
+                    .ignoresSafeArea()
+
+                ParentSubmissionRejectDialog(
+                    rejectionReason: $rejectionReason,
+                    isWorking: appModel.isWorking,
+                    onReject: reject,
+                    onCancel: {
+                        showingRejectDialog = false
+                    }
+                )
+                .padding(24)
+                .transition(.opacity)
+            }
         }
-        .background(Color.chorraSoftSurface.ignoresSafeArea())
-        .safeAreaInset(edge: .bottom) {
-            reviewControls
-        }
+        .animation(.easeInOut(duration: 0.18), value: showingRejectDialog)
     }
 
     private var reviewHeader: some View {
-        HStack {
-            Spacer()
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.chorraTextSecondary)
-                    .frame(width: 36, height: 36)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
+
+            VStack(spacing: 8) {
+                ChorraIconView(
+                    iconName: item.assignment.iconName,
+                    size: 64,
+                    background: .clear,
+                    padding: 6
+                )
+
+                Text(item.assignment.title)
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 56)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 4)
-        .background(Color.chorraSoftSurface)
+        .frame(maxWidth: .infinity, minHeight: 168, alignment: .top)
     }
 
     private var reviewControls: some View {
-        VStack(spacing: 12) {
-            TextField("Reason if rejecting", text: $rejectionReason, axis: .vertical)
-                .font(.body)
-                .lineLimit(2...4)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background(Color.chorraSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(Color.chorraBorder, lineWidth: 1)
-                }
-                .disabled(appModel.isWorking || submission == nil)
-
-            HStack(spacing: 12) {
-                Button {
-                    approve()
-                } label: {
-                    Text("Approve")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(ChorraPrimaryButtonStyle())
-                .disabled(appModel.isWorking || submission == nil)
-
-                Button {
-                    reject()
-                } label: {
-                    Text("Reject")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(ParentReviewRejectButtonStyle())
-                .disabled(appModel.isWorking || submission == nil)
+        HStack(spacing: 12) {
+            Button {
+                approve()
+            } label: {
+                Text("Approve")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(ChorraPrimaryButtonStyle())
+            .disabled(appModel.isWorking || submission == nil)
+
+            Button {
+                showingRejectDialog = true
+            } label: {
+                Text("Reject")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ParentReviewRejectButtonStyle())
+            .disabled(appModel.isWorking || submission == nil)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
-        .background(Color.chorraSoftSurface)
     }
 
     @ViewBuilder
-    private var proofImage: some View {
-        if let url = item.signedImageURL {
+    private var proofImageSurface: some View {
+        ZStack(alignment: .topLeading) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color.black)
+
+                taskProofImage
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+
+            faceProofImage
+                .frame(width: 118, height: 118 / photoAspectRatio)
+                .padding(14)
+        }
+        .clipped()
+        .shadow(color: Color.black.opacity(0.16), radius: 18, y: 10)
+    }
+
+    @ViewBuilder
+    private var taskProofImage: some View {
+        if let url = item.signedTaskImageURL {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
                     ProgressView()
-                        .frame(maxWidth: .infinity, minHeight: 220)
+                        .tint(Color.chorraSurface)
                 case .success(let image):
                     image
                         .resizable()
                         .scaledToFill()
-                        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 300)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failure:
-                    Text("Photo unavailable")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.chorraTextSecondary)
-                        .frame(maxWidth: .infinity, minHeight: 120)
+                    proofPlaceholder(systemImage: "photo")
                 @unknown default:
                     EmptyView()
                 }
             }
         } else {
-            ChorraEmptyState(title: "Photo unavailable", systemImage: "photo")
+            proofPlaceholder(systemImage: "photo")
         }
+    }
+
+    @ViewBuilder
+    private var faceProofImage: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black)
+
+            if let url = item.signedFaceImageURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .tint(Color.chorraSurface)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .failure:
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(Color.chorraSurface.opacity(0.72))
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(Color.chorraSurface.opacity(0.72))
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.chorraSurface.opacity(0.9), lineWidth: 3)
+        }
+        .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+    }
+
+    private func proofPlaceholder(systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.largeTitle.weight(.semibold))
+            .foregroundStyle(Color.chorraSurface.opacity(0.72))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var submission: TaskSubmission? {
@@ -991,14 +1070,80 @@ private struct ParentTaskReviewSheet: View {
             return
         }
 
+        let trimmedReason = rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+
         Task {
             await appModel.rejectSubmission(
                 submission,
-                reason: rejectionReason.trimmingCharacters(in: .whitespacesAndNewlines)
+                reason: trimmedReason.isEmpty ? nil : trimmedReason
             )
             if appModel.errorMessage == nil {
+                showingRejectDialog = false
                 dismiss()
             }
+        }
+    }
+
+    private var taskColor: Color {
+        PastelCardColor.color(from: item.assignment.cardColorHex)
+    }
+
+    private func photoWidth(for size: CGSize) -> CGFloat {
+        let availableWidth = max(0, size.width - 32)
+        let heightConstrainedWidth = max(240, (size.height - 320) * photoAspectRatio)
+        return min(availableWidth, min(500, heightConstrainedWidth))
+    }
+}
+
+private struct ParentSubmissionRejectDialog: View {
+    @Binding var rejectionReason: String
+    let isWorking: Bool
+    let onReject: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            VStack(spacing: 8) {
+                Text("Reject task?")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text("Add optional feedback for next time.")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.chorraTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            TextField("Optional feedback", text: $rejectionReason, axis: .vertical)
+                .font(.body)
+                .lineLimit(2...4)
+                .chorraInput()
+                .disabled(isWorking)
+
+            HStack(spacing: 12) {
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraSecondaryButtonStyle())
+                .disabled(isWorking)
+
+                Button(action: onReject) {
+                    Text("Reject")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
+                .disabled(isWorking)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
 }
@@ -2313,8 +2458,10 @@ private extension ParentDashboardData {
                     assignment: assignment,
                     child: child,
                     latestSubmission: submission,
-                    image: nil,
-                    signedImageURL: nil
+                    taskImage: nil,
+                    faceImage: nil,
+                    signedTaskImageURL: nil,
+                    signedFaceImageURL: nil
                 )
             ],
             rewards: [RewardItem(reward: reward)],

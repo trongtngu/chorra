@@ -224,15 +224,34 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
-    func submitTaskCompletion(assignment: TaskAssignment, child: Child, jpegData: Data) async throws -> ChildDashboardData {
+    func submitTaskCompletion(
+        assignment: TaskAssignment,
+        child: Child,
+        taskJPEGData: Data,
+        faceJPEGData: Data
+    ) async throws -> ChildDashboardData {
         let submissionId = UUID()
-        let storagePath = "\(child.householdId.uuidString)/\(child.id.uuidString)/\(submissionId.uuidString)/completion.jpg"
+        let storagePathPrefix = "\(child.householdId.uuidString)/\(child.id.uuidString)/\(submissionId.uuidString)"
+        let taskStoragePath = "\(storagePathPrefix)/task.jpg"
+        let faceStoragePath = "\(storagePathPrefix)/face.jpg"
 
         try await client.storage
             .from("task-photos")
             .upload(
-                storagePath,
-                data: jpegData,
+                taskStoragePath,
+                data: taskJPEGData,
+                options: FileOptions(
+                    cacheControl: "3600",
+                    contentType: "image/jpeg",
+                    upsert: false
+                )
+            )
+
+        try await client.storage
+            .from("task-photos")
+            .upload(
+                faceStoragePath,
+                data: faceJPEGData,
                 options: FileOptions(
                     cacheControl: "3600",
                     contentType: "image/jpeg",
@@ -243,7 +262,8 @@ final class ChorraService {
         let _: TaskSubmission = try await client
             .rpc("submit_task_completion", params: SubmitTaskCompletionParams(
                 pAssignmentId: assignment.id,
-                pStoragePath: storagePath,
+                pTaskStoragePath: taskStoragePath,
+                pFaceStoragePath: faceStoragePath,
                 pSubmissionId: submissionId
             ))
             .execute()
@@ -552,7 +572,7 @@ final class ChorraService {
     ) -> [ParentTaskReviewItem] {
         let childrenById = Dictionary(uniqueKeysWithValues: children.map { ($0.id, $0) })
         let submissionsByAssignment = Dictionary(grouping: submissions, by: \.assignmentId)
-        let imagesBySubmission = Dictionary(uniqueKeysWithValues: images.map { ($0.submissionId, $0) })
+        let imagesBySubmission = Dictionary(grouping: images, by: \.submissionId)
 
         return assignments
             .compactMap { assignment -> ParentTaskReviewItem? in
@@ -562,12 +582,16 @@ final class ChorraService {
                     return nil
                 }
 
+                let submissionImages = latestSubmission.flatMap { imagesBySubmission[$0.id] } ?? []
+
                 return ParentTaskReviewItem(
                     assignment: assignment,
                     child: childrenById[assignment.childId],
                     latestSubmission: latestSubmission,
-                    image: latestSubmission.flatMap { imagesBySubmission[$0.id] },
-                    signedImageURL: nil
+                    taskImage: submissionImages.first(where: { $0.imageKind == .task }),
+                    faceImage: submissionImages.first(where: { $0.imageKind == .face }),
+                    signedTaskImageURL: nil,
+                    signedFaceImageURL: nil
                 )
             }
             .sorted {
@@ -731,12 +755,14 @@ private struct ArchiveTaskAssignmentParams: Encodable {
 
 private struct SubmitTaskCompletionParams: Encodable {
     let pAssignmentId: UUID
-    let pStoragePath: String
+    let pTaskStoragePath: String
+    let pFaceStoragePath: String
     let pSubmissionId: UUID
 
     enum CodingKeys: String, CodingKey {
         case pAssignmentId = "p_assignment_id"
-        case pStoragePath = "p_storage_path"
+        case pTaskStoragePath = "p_task_storage_path"
+        case pFaceStoragePath = "p_face_storage_path"
         case pSubmissionId = "p_submission_id"
     }
 }

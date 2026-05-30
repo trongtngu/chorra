@@ -457,6 +457,7 @@ private struct ChildTaskDetailView: View {
     @StateObject private var camera = TaskCameraModel()
 
     private let cameraAspectRatio: CGFloat = 3.0 / 4.0
+    private let facePreviewAspectRatio: CGFloat = 3.0 / 4.0
 
     var body: some View {
         GeometryReader { proxy in
@@ -467,10 +468,9 @@ private struct ChildTaskDetailView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
 
-                Spacer(minLength: 18)
-
                 cameraSurface
                     .frame(width: cameraWidth, height: cameraWidth / cameraAspectRatio)
+                    .padding(.top, 8)
 
                 Spacer(minLength: 28)
 
@@ -495,7 +495,42 @@ private struct ChildTaskDetailView: View {
     }
 
     private var taskHeader: some View {
-        ZStack(alignment: .topLeading) {
+        VStack(spacing: 0) {
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+
+            headerContent
+                .padding(.horizontal, 56)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private var headerContent: some View {
+        if camera.isCapturingFacePhoto {
+            Text("Say cheese!")
+                .font(.system(size: 34, weight: .black, design: .rounded))
+                .foregroundStyle(Color.chorraTextPrimary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity)
+        } else {
             VStack(spacing: 8) {
                 ChorraIconView(
                     iconName: item.assignment.iconName,
@@ -512,75 +547,116 @@ private struct ChildTaskDetailView: View {
                     .minimumScaleFactor(0.7)
                     .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 56)
-            .frame(maxWidth: .infinity)
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(Color.chorraTextPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(Color.chorraSurface.opacity(0.36))
-                    .clipShape(Circle())
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Back")
         }
-        .frame(maxWidth: .infinity, minHeight: 116, alignment: .top)
     }
 
     private var cameraSurface: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.black)
+        ZStack(alignment: .topLeading) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color.black)
 
-            if let capturedImage = camera.capturedImage {
-                Image(uiImage: capturedImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                switch camera.cameraState {
-                case .idle, .configuring:
-                    VStack(spacing: 12) {
-                        ProgressView()
-                            .tint(Color.chorraSurface)
+                mainCameraContent
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
 
-                        Text("Starting camera")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.chorraSurface.opacity(0.78))
-                    }
-                case .ready:
-                    TaskCameraPreview(session: camera.session)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .unavailable(let message):
-                    VStack(spacing: 12) {
-                        Image(systemName: "camera.fill")
-                            .font(.largeTitle)
-
-                        Text(message)
-                            .font(.subheadline.weight(.semibold))
-                            .multilineTextAlignment(.center)
-                    }
-                    .foregroundStyle(Color.chorraSurface.opacity(0.82))
-                    .padding(24)
-                }
+            if camera.showsFaceReviewInset {
+                faceCameraSurface
+                    .frame(width: 118, height: 118 / facePreviewAspectRatio)
+                    .padding(14)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .clipped()
         .shadow(color: Color.black.opacity(0.16), radius: 18, y: 10)
     }
 
     @ViewBuilder
-    private var controls: some View {
-        if camera.capturedJPEGData == nil {
-            captureButton
+    private var mainCameraContent: some View {
+        if camera.captureStage == .review, let capturedImage = camera.capturedTaskImage {
+            Image(uiImage: capturedImage)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let source = camera.primaryPreviewSource {
+            TaskCameraPreview(source: source)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
+            cameraStatusContent
+        }
+    }
+
+    private var faceCameraSurface: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black)
+
+            faceCameraContent
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.chorraSurface.opacity(0.9), lineWidth: 3)
+        }
+        .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+        .accessibilityLabel("Face photo preview")
+    }
+
+    @ViewBuilder
+    private var faceCameraContent: some View {
+        if let capturedImage = camera.capturedFaceImage {
+            Image(uiImage: capturedImage)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private var cameraStatusContent: some View {
+        switch camera.cameraState {
+        case .idle, .configuring:
+            VStack(spacing: 12) {
+                ProgressView()
+                    .tint(Color.chorraSurface)
+
+                Text("Starting camera")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.chorraSurface.opacity(0.78))
+            }
+        case .ready:
+            EmptyView()
+        case .unavailable(let message):
+            VStack(spacing: 12) {
+                Image(systemName: "camera.fill")
+                    .font(.largeTitle)
+
+                Text(message)
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(Color.chorraSurface.opacity(0.82))
+            .padding(24)
+        }
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        if camera.isReadyForSubmission {
             reviewActions
+        } else {
+            captureControls
+        }
+    }
+
+    private var captureControls: some View {
+        HStack(spacing: 42) {
+            Color.clear
+                .frame(width: 64, height: 64)
+                .accessibilityHidden(true)
+
+            captureButton
+
+            toggleCameraButton
         }
     }
 
@@ -602,7 +678,24 @@ private struct ChildTaskDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(!canCapture || appModel.isWorking)
-        .accessibilityLabel("Take photo")
+        .accessibilityLabel(camera.isCapturingFacePhoto ? "Take face photo" : "Take photo")
+    }
+
+    private var toggleCameraButton: some View {
+        Button {
+            camera.toggleCamera()
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(Color.chorraSurface)
+                .frame(width: 64, height: 64)
+                .background(Color.black.opacity(0.18))
+                .clipShape(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(appModel.isWorking || camera.isCapturing || camera.isReadyForSubmission)
+        .accessibilityLabel("Switch camera")
     }
 
     private var reviewActions: some View {
@@ -614,7 +707,8 @@ private struct ChildTaskDetailView: View {
             .disabled(appModel.isWorking)
 
             Button("Submit for review") {
-                guard let jpegData = camera.capturedJPEGData else {
+                guard let taskJPEGData = camera.capturedTaskJPEGData,
+                      let faceJPEGData = camera.capturedFaceJPEGData else {
                     return
                 }
 
@@ -622,7 +716,8 @@ private struct ChildTaskDetailView: View {
                     await appModel.submitTaskCompletion(
                         assignment: item.assignment,
                         child: child,
-                        jpegData: jpegData
+                        taskJPEGData: taskJPEGData,
+                        faceJPEGData: faceJPEGData
                     )
 
                     if appModel.errorMessage == nil {
@@ -631,13 +726,16 @@ private struct ChildTaskDetailView: View {
                 }
             }
             .buttonStyle(ChorraPrimaryButtonStyle())
-            .disabled(appModel.isWorking || camera.capturedJPEGData == nil)
+            .disabled(appModel.isWorking || !camera.isReadyForSubmission)
         }
         .frame(maxWidth: .infinity)
     }
 
     private var canCapture: Bool {
-        camera.cameraState.isReady && camera.capturedJPEGData == nil
+        camera.cameraState.isReady
+            && !camera.isCapturing
+            && !camera.isReadyForSubmission
+            && camera.canCaptureActivePhoto
     }
 
     private var taskColor: Color {
@@ -666,20 +764,57 @@ private enum TaskCameraState {
     }
 }
 
-private final class TaskCameraModel: NSObject, ObservableObject {
-    let session = AVCaptureSession()
+private enum TaskCaptureStage {
+    case task
+    case face
+    case review
+}
 
+private struct TaskCameraPreviewSource {
+    let session: AVCaptureSession
+}
+
+private final class TaskCameraModel: NSObject, ObservableObject {
     @Published private(set) var cameraState: TaskCameraState = .idle
-    @Published private(set) var capturedImage: UIImage?
-    @Published private(set) var capturedJPEGData: Data?
+    @Published private(set) var captureStage: TaskCaptureStage = .task
+    @Published private(set) var activeCameraPosition: AVCaptureDevice.Position = .back
+    @Published private(set) var isCapturing = false
+    @Published private(set) var primaryPreviewSource: TaskCameraPreviewSource?
+    @Published private(set) var capturedTaskImage: UIImage?
+    @Published private(set) var capturedFaceImage: UIImage?
+    @Published private(set) var capturedTaskJPEGData: Data?
+    @Published private(set) var capturedFaceJPEGData: Data?
 
     private let sessionQueue = DispatchQueue(label: "com.trongpapaya.chorra.task-camera")
+    private let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
-    private var isConfigured = false
     private var photoDelegate: TaskPhotoCaptureDelegate?
 
+    var isReadyForSubmission: Bool {
+        capturedTaskJPEGData != nil && capturedFaceJPEGData != nil
+    }
+
+    var showsFaceReviewInset: Bool {
+        captureStage == .review && isReadyForSubmission
+    }
+
+    var isCapturingFacePhoto: Bool {
+        captureStage != .review && activeCameraPosition == .front
+    }
+
+    var canCaptureActivePhoto: Bool {
+        switch activeCameraPosition {
+        case .front:
+            return capturedFaceJPEGData == nil
+        case .back:
+            return capturedTaskJPEGData == nil
+        default:
+            return false
+        }
+    }
+
     func start() {
-        guard capturedJPEGData == nil else {
+        guard !isReadyForSubmission else {
             return
         }
 
@@ -706,40 +841,22 @@ private final class TaskCameraModel: NSObject, ObservableObject {
 
     func stop() {
         sessionQueue.async { [weak self] in
-            guard let self else {
-                return
-            }
-
-            if self.session.isRunning {
-                self.session.stopRunning()
-            }
+            self?.stopSessionOnQueue()
         }
     }
 
     func capturePhoto() {
-        guard cameraState.isReady, capturedJPEGData == nil else {
+        guard cameraState.isReady, !isCapturing, !isReadyForSubmission, canCaptureActivePhoto else {
             return
         }
 
+        isCapturing = true
         let settings = AVCapturePhotoSettings()
         settings.photoQualityPrioritization = .balanced
 
         let delegate = TaskPhotoCaptureDelegate { [weak self] result in
             DispatchQueue.main.async {
-                guard let self else {
-                    return
-                }
-
-                switch result {
-                case .success(let photo):
-                    self.capturedImage = photo.image
-                    self.capturedJPEGData = photo.jpegData
-                    self.stop()
-                case .failure:
-                    self.cameraState = .unavailable("Could not take photo. Try again.")
-                }
-
-                self.photoDelegate = nil
+                self?.handleCapture(result)
             }
         }
 
@@ -747,13 +864,34 @@ private final class TaskCameraModel: NSObject, ObservableObject {
         photoOutput.capturePhoto(with: settings, delegate: delegate)
     }
 
+    func toggleCamera() {
+        guard !isCapturing, !isReadyForSubmission else {
+            return
+        }
+
+        let nextPosition: AVCaptureDevice.Position = activeCameraPosition == .front ? .back : .front
+        configureAndStart(position: nextPosition)
+    }
+
     func retake() {
-        capturedImage = nil
-        capturedJPEGData = nil
+        stop()
+        capturedTaskImage = nil
+        capturedFaceImage = nil
+        capturedTaskJPEGData = nil
+        capturedFaceJPEGData = nil
+        primaryPreviewSource = nil
+        captureStage = .task
+        activeCameraPosition = .back
+        isCapturing = false
         start()
     }
 
     private func configureAndStart() {
+        let preferredPosition: AVCaptureDevice.Position = capturedTaskJPEGData == nil ? .back : .front
+        configureAndStart(position: preferredPosition)
+    }
+
+    private func configureAndStart(position: AVCaptureDevice.Position) {
         cameraState = .configuring
 
         sessionQueue.async { [weak self] in
@@ -761,34 +899,75 @@ private final class TaskCameraModel: NSObject, ObservableObject {
                 return
             }
 
-            if !self.isConfigured {
-                do {
-                    try self.configureSession()
-                } catch {
-                    DispatchQueue.main.async {
-                        self.cameraState = .unavailable("Camera is unavailable.")
-                    }
-                    return
+            do {
+                let source = try self.configureSession(position: position)
+
+                if !self.session.isRunning {
+                    self.session.startRunning()
                 }
-            }
 
-            if !self.session.isRunning {
-                self.session.startRunning()
-            }
-
-            DispatchQueue.main.async {
-                self.cameraState = .ready
+                DispatchQueue.main.async {
+                    self.activeCameraPosition = position
+                    self.captureStage = position == .front ? .face : .task
+                    self.primaryPreviewSource = source
+                    self.cameraState = .ready
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.cameraState = .unavailable("Camera is unavailable.")
+                }
             }
         }
     }
 
-    private func configureSession() throws {
+    private func handleCapture(_ result: Result<TaskPhotoCaptureDelegate.CapturedPhoto, Error>) {
+        defer {
+            photoDelegate = nil
+        }
+
+        switch result {
+        case .success(let photo):
+            if activeCameraPosition == .front {
+                capturedFaceImage = photo.image
+                capturedFaceJPEGData = photo.jpegData
+                isCapturing = false
+
+                if capturedTaskJPEGData == nil {
+                    configureAndStart(position: .back)
+                } else {
+                    captureStage = .review
+                    stop()
+                }
+            } else {
+                capturedTaskImage = photo.image
+                capturedTaskJPEGData = photo.jpegData
+                isCapturing = false
+
+                if capturedFaceJPEGData == nil {
+                    configureAndStart(position: .front)
+                } else {
+                    captureStage = .review
+                    stop()
+                }
+            }
+        case .failure:
+            isCapturing = false
+            cameraState = .unavailable("Could not take photo. Try again.")
+        }
+    }
+
+    private func configureSession(position: AVCaptureDevice.Position) throws -> TaskCameraPreviewSource {
+        stopSessionOnQueue()
+
         session.beginConfiguration()
         session.sessionPreset = .photo
         defer { session.commitConfiguration() }
 
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
-            ?? AVCaptureDevice.default(for: .video) else {
+        session.inputs.forEach { session.removeInput($0) }
+        session.outputs.forEach { session.removeOutput($0) }
+
+        let fallbackCamera = position == .back ? AVCaptureDevice.default(for: .video) : nil
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) ?? fallbackCamera else {
             throw TaskCameraError.unavailable
         }
 
@@ -802,7 +981,13 @@ private final class TaskCameraModel: NSObject, ObservableObject {
         session.addOutput(photoOutput)
 
         photoOutput.maxPhotoQualityPrioritization = .balanced
-        isConfigured = true
+        return TaskCameraPreviewSource(session: session)
+    }
+
+    private func stopSessionOnQueue() {
+        if session.isRunning {
+            session.stopRunning()
+        }
     }
 }
 
@@ -845,17 +1030,17 @@ private enum TaskCameraError: Error {
 }
 
 private struct TaskCameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+    let source: TaskCameraPreviewSource
 
     func makeUIView(context: Context) -> TaskCameraPreviewView {
         let view = TaskCameraPreviewView()
-        view.previewLayer.session = session
+        view.previewLayer.session = source.session
         view.previewLayer.videoGravity = .resizeAspectFill
         return view
     }
 
     func updateUIView(_ uiView: TaskCameraPreviewView, context: Context) {
-        uiView.previewLayer.session = session
+        uiView.previewLayer.session = source.session
     }
 }
 

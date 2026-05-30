@@ -226,7 +226,7 @@ private struct ParentHomeTab: View {
             Button("Delete", role: .destructive) {
                 deletingAssignedTask = nil
                 Task {
-                    await appModel.archiveTaskAssignment(item.assignment)
+                    awaitsw appModel.archiveTaskAssignment(item.assignment)
                 }
             }
 

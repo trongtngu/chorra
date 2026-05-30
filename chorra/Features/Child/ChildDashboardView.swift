@@ -456,38 +456,80 @@ private struct ChildTaskDetailView: View {
 
     @StateObject private var camera = TaskCameraModel()
 
+    private let cameraAspectRatio: CGFloat = 3.0 / 4.0
+
     var body: some View {
-        VStack(spacing: 22) {
-            Text("Send an image of the task")
-                .font(.title2.weight(.bold))
-                .foregroundStyle(Color.chorraTextPrimary)
-                .multilineTextAlignment(.center)
-                .padding(.top, 8)
+        GeometryReader { proxy in
+            let cameraWidth = cameraWidth(for: proxy.size)
 
-            cameraSurface
+            VStack(spacing: 0) {
+                taskHeader
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
-            if camera.capturedJPEGData == nil {
-                captureButton
-            } else {
-                reviewActions
+                Spacer(minLength: 18)
+
+                cameraSurface
+                    .frame(width: cameraWidth, height: cameraWidth / cameraAspectRatio)
+
+                Spacer(minLength: 28)
+
+                controls
+                    .frame(maxWidth: 430)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 32)
             }
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(taskColor.ignoresSafeArea())
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 18)
-        .padding(.bottom, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.chorraSurface.ignoresSafeArea())
-        .navigationTitle("Complete")
-        .navigationBarTitleDisplayMode(.inline)
-        .chorraNavigationBar()
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear {
             camera.start()
         }
         .onDisappear {
             camera.stop()
         }
+    }
+
+    private var taskHeader: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(spacing: 8) {
+                ChorraIconView(
+                    iconName: item.assignment.iconName,
+                    size: 64,
+                    background: .clear,
+                    padding: 6
+                )
+
+                Text(item.assignment.title)
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 56)
+            .frame(maxWidth: .infinity)
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .frame(width: 44, height: 44)
+                    .background(Color.chorraSurface.opacity(0.36))
+                    .clipShape(Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+        }
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .top)
     }
 
     private var cameraSurface: some View {
@@ -499,6 +541,7 @@ private struct ChildTaskDetailView: View {
                 Image(uiImage: capturedImage)
                     .resizable()
                     .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 switch camera.cameraState {
                 case .idle, .configuring:
@@ -512,6 +555,7 @@ private struct ChildTaskDetailView: View {
                     }
                 case .ready:
                     TaskCameraPreview(session: camera.session)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .unavailable(let message):
                     VStack(spacing: 12) {
                         Image(systemName: "camera.fill")
@@ -526,14 +570,18 @@ private struct ChildTaskDetailView: View {
                 }
             }
         }
-        .aspectRatio(3.0 / 4.0, contentMode: .fit)
-        .frame(maxWidth: 430)
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.chorraBorder, lineWidth: 1)
-        }
         .clipped()
+        .shadow(color: Color.black.opacity(0.16), radius: 18, y: 10)
+    }
+
+    @ViewBuilder
+    private var controls: some View {
+        if camera.capturedJPEGData == nil {
+            captureButton
+        } else {
+            reviewActions
+        }
     }
 
     private var captureButton: some View {
@@ -542,17 +590,15 @@ private struct ChildTaskDetailView: View {
         } label: {
             ZStack {
                 Circle()
-                    .stroke(Color.chorraTextPrimary.opacity(0.18), lineWidth: 5)
-                    .frame(width: 78, height: 78)
+                    .stroke(Color.chorraSurface, lineWidth: 7)
+                    .frame(width: 96, height: 96)
 
                 Circle()
-                    .fill(canCapture ? Color.chorraPrimary : Color.chorraTextMuted)
-                    .frame(width: 62, height: 62)
-
-                Image(systemName: "camera.fill")
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.chorraSurface)
+                    .fill(Color.chorraSurface.opacity(canCapture ? 0.16 : 0.08))
+                    .frame(width: 74, height: 74)
             }
+            .opacity(canCapture ? 1 : 0.48)
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(!canCapture || appModel.isWorking)
@@ -587,10 +633,21 @@ private struct ChildTaskDetailView: View {
             .buttonStyle(ChorraPrimaryButtonStyle())
             .disabled(appModel.isWorking || camera.capturedJPEGData == nil)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var canCapture: Bool {
         camera.cameraState.isReady && camera.capturedJPEGData == nil
+    }
+
+    private var taskColor: Color {
+        PastelCardColor.color(from: item.assignment.cardColorHex)
+    }
+
+    private func cameraWidth(for size: CGSize) -> CGFloat {
+        let availableWidth = max(0, size.width - 32)
+        let heightConstrainedWidth = max(240, (size.height - 320) * cameraAspectRatio)
+        return min(availableWidth, min(500, heightConstrainedWidth))
     }
 }
 

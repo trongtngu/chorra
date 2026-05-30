@@ -46,6 +46,13 @@ struct ParentDashboardView: View {
             .tabItem {
                 Label(ParentDashboardTab.rewards.title, systemImage: ParentDashboardTab.rewards.systemImage)
             }
+
+            ParentSettingsTab(data: data)
+                .environmentObject(appModel)
+                .tag(ParentDashboardTab.settings)
+                .tabItem {
+                    Label(ParentDashboardTab.settings.title, systemImage: ParentDashboardTab.settings.systemImage)
+                }
         }
         .chorraTabBar()
         .background(Color.chorraBackground)
@@ -72,6 +79,7 @@ private enum ParentDashboardTab: Hashable, CaseIterable {
     case home
     case tasks
     case rewards
+    case settings
 
     var title: String {
         switch self {
@@ -81,6 +89,8 @@ private enum ParentDashboardTab: Hashable, CaseIterable {
             return "Tasks"
         case .rewards:
             return "Rewards"
+        case .settings:
+            return "Settings"
         }
     }
 
@@ -92,6 +102,8 @@ private enum ParentDashboardTab: Hashable, CaseIterable {
             return "checklist"
         case .rewards:
             return "gift.fill"
+        case .settings:
+            return "gearshape.fill"
         }
     }
 }
@@ -126,14 +138,6 @@ private struct ParentTabContainer<HeaderAccessory: View, Content: View>: View {
                     }
                     .accessibilityLabel("Refresh")
                     .disabled(appModel.isWorking)
-
-                    Button {
-                        Task { await appModel.signOut() }
-                    } label: {
-                        ChorraToolbarIcon(systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                    .accessibilityLabel("Sign out")
-                    .disabled(appModel.isWorking)
                 }
             } content: {
                 content
@@ -155,39 +159,19 @@ private struct ParentHomeTab: View {
     @State private var expandedChildIds: Set<UUID> = []
 
     var body: some View {
-        ParentTabContainer(
-            title: "Home code",
-            headerAccessory: {
-                HouseholdCodeHeaderValue(code: data.household.loginCode)
+        ParentTabContainer(title: "Home") {
+            VStack(alignment: .leading, spacing: 0) {
+                tasksLeftHero
+
+                ChorraSectionHeader(
+                    title: "Children",
+                    actionTitle: "Add",
+                    systemImage: "person.badge.plus",
+                    action: onAddChild
+                )
+                .padding(.top, -4)
             }
-        ) {
-            ChorraSectionHeader(title: "Parents")
-
-            if data.parents.isEmpty {
-                ParentHomeGroupedCard {
-                    ChorraEmptyState(title: "No parents yet", systemImage: "person.2")
-                }
-            } else {
-                ParentHomeGroupedCard {
-                    ForEach(Array(data.parents.enumerated()), id: \.element.id) { index, parent in
-                        ParentSummaryRow(
-                            profile: parent,
-                            isCurrentUser: parent.id == data.profile.id
-                        )
-
-                        if index < data.parents.count - 1 {
-                            ChorraDivider()
-                        }
-                    }
-                }
-            }
-
-            ChorraSectionHeader(
-                title: "Children",
-                actionTitle: "Add",
-                systemImage: "person.badge.plus",
-                action: onAddChild
-            )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if data.children.isEmpty {
                 ChorraCard {
@@ -208,6 +192,28 @@ private struct ParentHomeTab: View {
         }
     }
 
+    private var tasksLeftHero: some View {
+        VStack(spacing: 2) {
+            Text("\(tasksLeftCount)")
+                .font(.system(size: 58, weight: .black, design: .rounded))
+                .foregroundStyle(Color.chorraTextPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+
+            Text("chores left")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(Color.chorraTextSecondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 22)
+        .accessibilityLabel("\(tasksLeftCount) chores left")
+    }
+
+    private var tasksLeftCount: Int {
+        data.childTaskItems.count
+    }
+
     private func points(for child: Child) -> Int {
         data.balances.first(where: { $0.childId == child.id })?.points ?? 0
     }
@@ -225,43 +231,65 @@ private struct ParentHomeTab: View {
     }
 }
 
-private struct ParentHomeGroupedCard<Content: View>: View {
-    private let cornerRadius: CGFloat = 20
+private struct ParentSettingsTab: View {
+    @EnvironmentObject private var appModel: AppViewModel
 
-    let content: Content
-
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
+    let data: ParentDashboardData
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            content
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.chorraSurface)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Color.chorraBorder.opacity(0.42), lineWidth: 1)
+        ParentTabContainer(title: "Settings") {
+            ChorraSectionHeader(title: "Home code")
+
+            ChorraCard {
+                HouseholdCodeCardValue(code: data.household.loginCode)
+            }
+
+            ChorraSectionHeader(title: "Parents")
+
+            if data.parents.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "No parents yet", systemImage: "person.2")
+                }
+            } else {
+                ChorraCard {
+                    ForEach(Array(data.parents.enumerated()), id: \.element.id) { index, parent in
+                        ParentSummaryRow(
+                            profile: parent,
+                            isCurrentUser: parent.id == data.profile.id
+                        )
+
+                        if index < data.parents.count - 1 {
+                            ChorraDivider()
+                        }
+                    }
+                }
+            }
+
+            ChorraSectionHeader(title: "Account")
+
+            Button {
+                Task { await appModel.signOut() }
+            } label: {
+                Label("Log out", systemImage: "rectangle.portrait.and.arrow.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
+            .disabled(appModel.isWorking)
+            .accessibilityLabel("Log out")
         }
     }
 }
 
-private struct HouseholdCodeHeaderValue: View {
+private struct HouseholdCodeCardValue: View {
     let code: String
 
     var body: some View {
         Text(code)
-            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+            .font(.system(size: 32, weight: .black, design: .monospaced))
             .foregroundStyle(Color.chorraPrimary)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.chorraSurface)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, alignment: .center)
             .accessibilityLabel("Home code \(code)")
     }
 }
@@ -282,15 +310,10 @@ private struct ParentSummaryRow: View {
             }
             .frame(width: 44, height: 44)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(profile.displayName)
-                    .font(.headline)
-                    .foregroundStyle(Color.chorraTextPrimary)
-
-                Text("Parent")
-                    .font(.caption)
-                    .foregroundStyle(Color.chorraTextSecondary)
-            }
+            Text(profile.displayName)
+                .font(.headline)
+                .foregroundStyle(Color.chorraTextPrimary)
+                .lineLimit(1)
 
             Spacer()
 
@@ -310,7 +333,7 @@ private struct CollapsibleChildCard: View {
     let onToggle: () -> Void
 
     var body: some View {
-        ParentHomeGroupedCard {
+        ChorraCard {
             Button(action: onToggle) {
                 HStack(spacing: 12) {
                     ZStack {
@@ -327,10 +350,12 @@ private struct CollapsibleChildCard: View {
                         Text(child.displayName)
                             .font(.headline)
                             .foregroundStyle(Color.chorraTextPrimary)
+                            .lineLimit(1)
 
-                        Text("@\(child.loginName)")
+                        Text(taskCountText)
                             .font(.caption)
                             .foregroundStyle(Color.chorraTextSecondary)
+                            .lineLimit(1)
                     }
 
                     Spacer()
@@ -365,6 +390,11 @@ private struct CollapsibleChildCard: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isExpanded)
+    }
+
+    private var taskCountText: String {
+        let count = tasks.count
+        return count == 1 ? "1 task" : "\(count) tasks"
     }
 }
 
@@ -1804,6 +1834,11 @@ private struct TaskPointValueDialog: View {
 
 #Preview("Parent Rewards") {
     ParentRewardsTab(data: .preview) {} onEditReward: { _ in }
+        .environmentObject(AppViewModel())
+}
+
+#Preview("Parent Settings") {
+    ParentSettingsTab(data: .preview)
         .environmentObject(AppViewModel())
 }
 

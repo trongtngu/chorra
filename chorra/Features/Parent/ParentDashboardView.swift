@@ -234,7 +234,7 @@ private struct ParentHomeTab: View {
                 deletingAssignedTask = nil
             }
         } message: { _ in
-            Text("This hides the assigned copy from parent and child task lists. Submission history and photos are preserved.")
+            Text("This cannot be undone.")
         }
     }
 
@@ -1074,54 +1074,90 @@ private struct AddChildView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appModel: AppViewModel
 
-    @State private var displayName = ""
-    @State private var loginName = ""
+    @State private var name = ""
     @State private var pin = ""
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Child") {
-                    TextField("Display name", text: $displayName)
-                    TextField("Login name", text: $loginName)
-                        .textInputAutocapitalization(.never)
-                    SecureField("PIN", text: $pin)
-                        .keyboardType(.numberPad)
-                }
-            }
-            .chorraFormBackground()
-            .navigationTitle("Add child")
-            .chorraNavigationBar()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .tint(.chorraSurface)
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+            ScrollView {
+                VStack(spacing: 24) {
+                    FormIconToolbar(
+                        saveTitle: "Save",
+                        canSave: canSave,
+                        isWorking: appModel.isWorking
+                    ) {
+                        dismiss()
+                    } onSave: {
                         Task {
-                            await appModel.addChild(
-                                displayName: displayName,
-                                loginName: loginName,
-                                pin: pin
-                            )
+                            await save()
                             if appModel.errorMessage == nil {
                                 dismiss()
                             }
                         }
                     }
-                    .tint(.chorraSurface)
-                    .disabled(appModel.isWorking || !canSave)
+
+                    Text("Add child")
+                        .font(.largeTitle.weight(.bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
+                        .frame(maxWidth: .infinity)
+
+                    VStack(spacing: 10) {
+                        TextField("Name", text: $name)
+                            .textContentType(.name)
+                            .addChildInput()
+
+                        SecureField("PIN", text: $pin)
+                            .keyboardType(.numberPad)
+                            .addChildInput()
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.chorraSoftSurface.ignoresSafeArea())
+            .tint(.chorraPrimary)
         }
     }
 
     private var canSave: Bool {
-        !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !loginName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !trimmedName.isEmpty
             && pin.count >= 4
+    }
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func save() async {
+        await appModel.addChild(
+            displayName: trimmedName,
+            loginName: trimmedName,
+            pin: pin
+        )
+    }
+}
+
+private struct AddChildInputModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .foregroundStyle(Color.chorraTextPrimary)
+            .background(Color.chorraSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.chorraBorder, lineWidth: 1)
+            }
+    }
+}
+
+private extension View {
+    func addChildInput() -> some View {
+        modifier(AddChildInputModifier())
     }
 }
 

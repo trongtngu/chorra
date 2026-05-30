@@ -19,9 +19,7 @@ struct ParentDashboardView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ParentHomeTab(data: data) {
-                showingAddChild = true
-            }
+            ParentHomeTab(data: data)
             .tag(ParentDashboardTab.home)
             .tabItem {
                 Label(ParentDashboardTab.home.title, systemImage: ParentDashboardTab.home.systemImage)
@@ -47,7 +45,9 @@ struct ParentDashboardView: View {
                 Label(ParentDashboardTab.rewards.title, systemImage: ParentDashboardTab.rewards.systemImage)
             }
 
-            ParentSettingsTab(data: data)
+            ParentSettingsTab(data: data) {
+                showingAddChild = true
+            }
                 .environmentObject(appModel)
                 .tag(ParentDashboardTab.settings)
                 .tabItem {
@@ -156,26 +156,13 @@ private struct ParentHomeTab: View {
     @EnvironmentObject private var appModel: AppViewModel
 
     let data: ParentDashboardData
-    let onAddChild: () -> Void
 
-    @State private var expandedChildIds: Set<UUID> = []
+    @State private var collapsedChildIds: Set<UUID> = []
     @State private var editingAssignedTask: ParentChildTaskItem?
-    @State private var deletingAssignedTask: ParentChildTaskItem?
 
     var body: some View {
         ParentTabContainer(title: "Home") {
-            VStack(alignment: .leading, spacing: 0) {
-                tasksLeftHero
-
-                ChorraSectionHeader(
-                    title: "Children",
-                    actionTitle: "Add",
-                    systemImage: "person.badge.plus",
-                    action: onAddChild
-                )
-                .padding(.top, -4)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            tasksLeftHero
 
             if data.children.isEmpty {
                 ChorraCard {
@@ -187,7 +174,7 @@ private struct ParentHomeTab: View {
                         child: child,
                         points: points(for: child),
                         tasks: tasks(for: child),
-                        isExpanded: expandedChildIds.contains(child.id),
+                        isExpanded: !collapsedChildIds.contains(child.id),
                         isWorking: appModel.isWorking
                     ) {
                         toggleChild(child)
@@ -197,12 +184,6 @@ private struct ParentHomeTab: View {
                         }
 
                         editingAssignedTask = item
-                    } onDeleteTask: { item in
-                        guard !appModel.isWorking else {
-                            return
-                        }
-
-                        deletingAssignedTask = item
                     }
                 }
             }
@@ -210,31 +191,6 @@ private struct ParentHomeTab: View {
         .sheet(item: $editingAssignedTask) { item in
             AssignedTaskFormView(item: item)
                 .environmentObject(appModel)
-        }
-        .alert(
-            "Delete assigned task?",
-            isPresented: Binding(
-                get: { deletingAssignedTask != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        deletingAssignedTask = nil
-                    }
-                }
-            ),
-            presenting: deletingAssignedTask
-        ) { item in
-            Button("Delete", role: .destructive) {
-                deletingAssignedTask = nil
-                Task {
-                    await appModel.archiveTaskAssignment(item.assignment)
-                }
-            }
-
-            Button("Cancel", role: .cancel) {
-                deletingAssignedTask = nil
-            }
-        } message: { _ in
-            Text("This cannot be undone.")
         }
     }
 
@@ -269,10 +225,10 @@ private struct ParentHomeTab: View {
     }
 
     private func toggleChild(_ child: Child) {
-        if expandedChildIds.contains(child.id) {
-            expandedChildIds.remove(child.id)
+        if collapsedChildIds.contains(child.id) {
+            collapsedChildIds.remove(child.id)
         } else {
-            expandedChildIds.insert(child.id)
+            collapsedChildIds.insert(child.id)
         }
     }
 }
@@ -281,6 +237,7 @@ private struct ParentSettingsTab: View {
     @EnvironmentObject private var appModel: AppViewModel
 
     let data: ParentDashboardData
+    let onAddChild: () -> Void
 
     var body: some View {
         ParentTabContainer(title: "Settings") {
@@ -288,6 +245,26 @@ private struct ParentSettingsTab: View {
 
             ChorraCard {
                 HouseholdCodeCardValue(code: data.household.loginCode)
+            }
+
+            ChorraSectionHeader(
+                title: "Children",
+                actionTitle: "Add",
+                systemImage: "person.badge.plus",
+                action: onAddChild
+            )
+
+            if data.children.isEmpty {
+                ChorraCard {
+                    ChorraEmptyState(title: "No children yet", systemImage: "person.2")
+                }
+            } else {
+                ForEach(data.children) { child in
+                    SettingsChildCard(
+                        child: child,
+                        points: points(for: child)
+                    )
+                }
             }
 
             ChorraSectionHeader(title: "Parents")
@@ -323,6 +300,10 @@ private struct ParentSettingsTab: View {
             .disabled(appModel.isWorking)
             .accessibilityLabel("Log out")
         }
+    }
+
+    private func points(for child: Child) -> Int {
+        data.balances.first(where: { $0.childId == child.id })?.points ?? 0
     }
 }
 
@@ -379,21 +360,12 @@ private struct CollapsibleChildCard: View {
     let isWorking: Bool
     let onToggle: () -> Void
     let onEditTask: (ParentChildTaskItem) -> Void
-    let onDeleteTask: (ParentChildTaskItem) -> Void
 
     var body: some View {
-        ChorraCard {
+        ChildCardContainer {
             Button(action: onToggle) {
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.chorraPrimarySoft)
-
-                        Text(String(child.displayName.prefix(1)).uppercased())
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(Color.chorraPrimary)
-                    }
-                    .frame(width: 44, height: 44)
+                    ChildInitialAvatar(name: child.displayName, size: 44)
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(child.displayName)
@@ -437,8 +409,6 @@ private struct CollapsibleChildCard: View {
                                 isWorking: isWorking
                             ) {
                                 onEditTask(item)
-                            } onDelete: {
-                                onDeleteTask(item)
                             }
                         }
                     }
@@ -454,77 +424,113 @@ private struct CollapsibleChildCard: View {
     }
 }
 
+private struct SettingsChildCard: View {
+    let child: Child
+    let points: Int
+
+    var body: some View {
+        ChildCardContainer {
+            HStack(spacing: 12) {
+                ChildInitialAvatar(name: child.displayName, size: 44)
+
+                Text(child.displayName)
+                    .font(.headline)
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                ChorraPointAmountLabel(amount: points, iconSize: 15)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.chorraPrimary)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+private struct ChildCardContainer<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
+        }
+    }
+}
+
+private struct ChildInitialAvatar: View {
+    let name: String
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.chorraPrimarySoft)
+
+            Text(String(name.prefix(1)).uppercased())
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundStyle(Color.chorraPrimary)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 private struct ParentHomeChildTaskCardView: View {
     let item: ParentChildTaskItem
     let isWorking: Bool
     let onEdit: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            ChorraIconView(
-                iconName: item.assignment.iconName,
-                size: 46,
-                background: .clear,
-                padding: 7
-            )
+        Button(action: edit) {
+            HStack(spacing: 12) {
+                ChorraIconView(
+                    iconName: item.assignment.iconName,
+                    size: 46,
+                    background: .clear,
+                    padding: 7
+                )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(item.assignment.title)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.chorraTextPrimary)
-                    .lineLimit(2)
-
-                ChorraPointAmountLabel(amount: item.assignment.pointValue, iconSize: 15)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
-
-                if let rejectionText {
-                    Text(rejectionText)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.chorraError)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.assignment.title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.chorraTextPrimary)
                         .lineLimit(2)
+
+                    ChorraPointAmountLabel(amount: item.assignment.pointValue, iconSize: 15)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                ChorraPill(
+                    title: item.assignment.status.label,
+                    color: statusColor,
+                    isFilled: item.assignment.status == .submitted
+                )
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            ChorraPill(
-                title: item.assignment.status.label,
-                color: statusColor,
-                isFilled: item.assignment.status == .submitted
-            )
+            .background(PastelCardColor.color(from: item.assignment.cardColorHex))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(PastelCardColor.color(from: item.assignment.cardColorHex))
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .contextMenu {
-            Button {
-                edit()
-            } label: {
-                Label("Edit", systemImage: "pencil")
-            }
-            .disabled(isWorking)
-
-            Button(role: .destructive) {
-                delete()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .disabled(isWorking)
-        }
-        .accessibilityAction(named: Text("Edit assigned task"), edit)
-        .accessibilityAction(named: Text("Delete assigned task"), delete)
-    }
-
-    private var rejectionText: String? {
-        guard let submission = item.latestSubmission, submission.status == .rejected else {
-            return nil
-        }
-
-        return submission.rejectionReason ?? "Needs more work"
+        .buttonStyle(.plain)
+        .disabled(isWorking)
+        .accessibilityLabel("Edit assigned task \(item.assignment.title)")
     }
 
     private var statusColor: Color {
@@ -548,14 +554,6 @@ private struct ParentHomeChildTaskCardView: View {
         }
 
         onEdit()
-    }
-
-    private func delete() {
-        guard !isWorking else {
-            return
-        }
-
-        onDelete()
     }
 }
 
@@ -1530,6 +1528,7 @@ private struct AssignedTaskFormView: View {
     @State private var pointValue: Int
     @State private var cardColorHex: String
     @State private var iconName: String
+    @State private var showingDeleteConfirmation = false
     @State private var showingDiscardConfirmation = false
     @State private var showingPointValueDialog = false
 
@@ -1604,6 +1603,22 @@ private struct AssignedTaskFormView: View {
                         IconPickerPanel(selectedIconName: $iconName)
                             .padding(.vertical, 4)
                     }
+
+                    RewardGroupedSection {
+                        Button(role: .destructive) {
+                            showingDeleteConfirmation = true
+                        } label: {
+                            RewardListRow(
+                                systemImage: "trash.fill",
+                                title: "Delete assigned task",
+                                value: nil,
+                                titleColor: .chorraError,
+                                iconColor: .chorraError
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appModel.isWorking)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
@@ -1642,6 +1657,20 @@ private struct AssignedTaskFormView: View {
         }
         .animation(.easeInOut(duration: 0.18), value: showingPointValueDialog)
         .animation(.easeInOut(duration: 0.18), value: showingDiscardConfirmation)
+        .alert("Delete assigned task?", isPresented: $showingDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    await appModel.archiveTaskAssignment(item.assignment)
+                    if appModel.errorMessage == nil {
+                        dismiss()
+                    }
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes only this assigned copy. The original task stays unchanged.")
+        }
     }
 
     private var canSave: Bool {
@@ -2318,7 +2347,7 @@ private struct TaskPointValueDialog: View {
 }
 
 #Preview("Parent Settings") {
-    ParentSettingsTab(data: .preview)
+    ParentSettingsTab(data: .preview) {}
         .environmentObject(AppViewModel())
 }
 

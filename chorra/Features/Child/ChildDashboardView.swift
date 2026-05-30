@@ -458,6 +458,7 @@ private struct ChildTaskDetailView: View {
 
     private let cameraAspectRatio: CGFloat = 3.0 / 4.0
     private let facePreviewAspectRatio: CGFloat = 3.0 / 4.0
+    private let captureHeadingTextMaxWidth: CGFloat = 280
 
     var body: some View {
         GeometryReader { proxy in
@@ -523,30 +524,28 @@ private struct ChildTaskDetailView: View {
     @ViewBuilder
     private var headerContent: some View {
         if camera.isCapturingFacePhoto {
-            Text("Say cheese!")
+            captureHeading(iconName: "Icon_Camera", title: "Say cheese!")
+        } else {
+            captureHeading(iconName: item.assignment.iconName, title: item.assignment.title)
+        }
+    }
+
+    private func captureHeading(iconName: String, title: String) -> some View {
+        VStack(spacing: 8) {
+            ChorraIconView(
+                iconName: iconName,
+                size: 64,
+                background: .clear,
+                padding: 6
+            )
+
+            Text(title)
                 .font(.system(size: 34, weight: .black, design: .rounded))
                 .foregroundStyle(Color.chorraTextPrimary)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity)
-        } else {
-            VStack(spacing: 8) {
-                ChorraIconView(
-                    iconName: item.assignment.iconName,
-                    size: 64,
-                    background: .clear,
-                    padding: 6
-                )
-
-                Text(item.assignment.title)
-                    .font(.system(size: 34, weight: .black, design: .rounded))
-                    .foregroundStyle(Color.chorraTextPrimary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity)
-            }
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: captureHeadingTextMaxWidth)
         }
     }
 

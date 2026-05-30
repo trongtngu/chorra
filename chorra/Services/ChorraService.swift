@@ -11,8 +11,10 @@ import Supabase
 struct ParentDashboardData: Hashable {
     let profile: Profile
     let household: Household
+    let parents: [Profile]
     let children: [Child]
     let balances: [ChildPointsBalance]
+    let childTaskItems: [ParentChildTaskItem]
     let taskItems: [ParentTaskItem]
     let reviewItems: [ParentTaskReviewItem]
     let rewards: [RewardItem]
@@ -41,6 +43,21 @@ final class ChorraService {
         return try await loadParentDashboard(profile: profile)
     }
 
+    func signUpParentToHousehold(email: String, password: String, displayName: String, householdCode: String) async throws -> ParentDashboardData {
+        do {
+            try await client.auth.signUp(email: email, password: password)
+        } catch let signUpError {
+            do {
+                _ = try await client.auth.user()
+            } catch {
+                throw signUpError
+            }
+        }
+
+        let profile = try await joinParentHousehold(displayName: displayName, householdCode: householdCode)
+        return try await loadParentDashboard(profile: profile)
+    }
+
     func signInParent(email: String, password: String) async throws -> ParentDashboardData {
         try await client.auth.signIn(email: email, password: password)
         let profile = try await fetchCurrentProfile()
@@ -54,6 +71,14 @@ final class ChorraService {
         let params = BootstrapParentParams(pDisplayName: displayName, pHouseholdName: householdName)
         return try await client
             .rpc("bootstrap_parent", params: params)
+            .execute()
+            .value
+    }
+
+    func joinParentHousehold(displayName: String, householdCode: String) async throws -> Profile {
+        let params = JoinParentHouseholdParams(pDisplayName: displayName, pHouseholdCode: householdCode)
+        return try await client
+            .rpc("join_parent_household", params: params)
             .execute()
             .value
     }
@@ -301,6 +326,14 @@ final class ChorraService {
             .execute()
             .value
 
+        let parents: [Profile] = try await client
+            .from("profiles")
+            .select()
+            .eq("household_id", value: profile.householdId.uuidString)
+            .eq("role", value: UserRole.parent.rawValue)
+            .execute()
+            .value
+
         let balances: [ChildPointsBalance] = try await client
             .from("child_points_balances")
             .select()
@@ -359,13 +392,19 @@ final class ChorraService {
             submissions: submissions,
             images: images
         )
+        let childTaskItems = buildParentChildTaskItems(
+            assignments: assignments,
+            submissions: submissions
+        )
         let redemptionItems = buildRedemptionItems(redemptions: redemptions, children: children)
 
         return ParentDashboardData(
             profile: profile,
             household: household,
+            parents: parents.sorted { $0.displayName < $1.displayName },
             children: children.sorted { $0.displayName < $1.displayName },
             balances: balances,
+            childTaskItems: childTaskItems,
             taskItems: taskItems,
             reviewItems: reviewItems,
             rewards: buildRewardItems(rewards: rewards),
@@ -455,6 +494,24 @@ final class ChorraService {
             .sorted { $0.task.createdAt > $1.task.createdAt }
     }
 
+    private func buildParentChildTaskItems(
+        assignments: [TaskAssignment],
+        submissions: [TaskSubmission]
+    ) -> [ParentChildTaskItem] {
+        let activeStatuses: Set<TaskStatus> = [.assigned, .rejected, .submitted]
+        let submissionsByAssignment = Dictionary(grouping: submissions, by: \.assignmentId)
+
+        return assignments
+            .filter { activeStatuses.contains($0.status) }
+            .map { assignment in
+                ParentChildTaskItem(
+                    assignment: assignment,
+                    latestSubmission: submissionsByAssignment[assignment.id]?.sorted { $0.createdAt > $1.createdAt }.first
+                )
+            }
+            .sorted { $0.assignment.assignedAt > $1.assignment.assignedAt }
+    }
+
     private func buildParentTaskReviewItems(
         assignments: [TaskAssignment],
         children: [Child],
@@ -531,6 +588,16 @@ private struct BootstrapParentParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case pDisplayName = "p_display_name"
         case pHouseholdName = "p_household_name"
+    }
+}
+
+private struct JoinParentHouseholdParams: Encodable {
+    let pDisplayName: String
+    let pHouseholdCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case pDisplayName = "p_display_name"
+        case pHouseholdCode = "p_household_code"
     }
 }
 

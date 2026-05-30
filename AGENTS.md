@@ -49,7 +49,7 @@ The current MVP supports these flows:
 - Parent signs up or signs in with email/password.
 - Parent account creation bootstraps a one-household parent profile.
 - Parent adds a child with display name, login name, and PIN.
-- Child starts from anonymous auth, then claims a child session using household code, login name, and PIN.
+- Child starts from anonymous auth, then claims a child session using the home code, login name, and PIN.
 - Parent creates reusable unassigned tasks with title, point value, pastel card color, and catalog icon, then assigns copied task instances to children.
 - Child opens an assigned or rejected task, captures a camera photo, and submits it for review.
 - Parent reviews the latest submission, approves it to complete the task and create a points ledger entry, or rejects it with optional feedback.

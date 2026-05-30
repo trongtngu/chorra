@@ -282,6 +282,7 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
     let rewardName: String
     let rewardIconName: String
     let rewardPointCost: Int
+    let rewardCardColorHex: String
     let redeemedAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -293,6 +294,7 @@ struct RewardRedemption: Codable, Identifiable, Hashable {
         case rewardName = "reward_name"
         case rewardIconName = "reward_icon_name"
         case rewardPointCost = "reward_point_cost"
+        case rewardCardColorHex = "reward_card_color_hex"
         case redeemedAt = "redeemed_at"
     }
 }
@@ -301,6 +303,13 @@ struct ParentTaskItem: Identifiable, Hashable {
     let task: ChorraTask
 
     var id: UUID { task.id }
+}
+
+struct ParentChildTaskItem: Identifiable, Hashable {
+    let assignment: TaskAssignment
+    let latestSubmission: TaskSubmission?
+
+    var id: UUID { assignment.id }
 }
 
 struct ParentTaskReviewItem: Identifiable, Hashable {

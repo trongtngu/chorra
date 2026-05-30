@@ -57,6 +57,18 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func signUpParentToHousehold(email: String, password: String, displayName: String, householdCode: String) async {
+        await run {
+            let data = try await serviceOrThrow().signUpParentToHousehold(
+                email: email,
+                password: password,
+                displayName: displayName,
+                householdCode: householdCode
+            )
+            session = .parent(try await decorate(data))
+        }
+    }
+
     func signInParent(email: String, password: String) async {
         await run {
             let data = try await serviceOrThrow().signInParent(email: email, password: password)
@@ -272,8 +284,10 @@ final class AppViewModel: ObservableObject {
         return ParentDashboardData(
             profile: data.profile,
             household: data.household,
+            parents: data.parents,
             children: data.children,
             balances: data.balances,
+            childTaskItems: data.childTaskItems,
             taskItems: data.taskItems,
             reviewItems: reviewItems,
             rewards: data.rewards,

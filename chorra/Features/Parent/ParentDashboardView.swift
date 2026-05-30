@@ -96,14 +96,20 @@ private enum ParentDashboardTab: Hashable, CaseIterable {
     }
 }
 
-private struct ParentTabContainer<Content: View>: View {
+private struct ParentTabContainer<HeaderAccessory: View, Content: View>: View {
     @EnvironmentObject private var appModel: AppViewModel
 
     let title: String
+    let headerAccessory: HeaderAccessory
     let content: Content
 
-    init(title: String, @ViewBuilder content: () -> Content) {
+    init(
+        title: String,
+        @ViewBuilder headerAccessory: () -> HeaderAccessory,
+        @ViewBuilder content: () -> Content
+    ) {
         self.title = title
+        self.headerAccessory = headerAccessory()
         self.content = content()
     }
 
@@ -111,6 +117,8 @@ private struct ParentTabContainer<Content: View>: View {
         NavigationStack {
             ChorraScreen(title: title) {
                 HStack(spacing: 8) {
+                    headerAccessory
+
                     Button {
                         Task { await appModel.refresh() }
                     } label: {
@@ -134,13 +142,45 @@ private struct ParentTabContainer<Content: View>: View {
     }
 }
 
+private extension ParentTabContainer where HeaderAccessory == EmptyView {
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.init(title: title, headerAccessory: { EmptyView() }, content: content)
+    }
+}
+
 private struct ParentHomeTab: View {
     let data: ParentDashboardData
     let onAddChild: () -> Void
 
+    @State private var expandedChildIds: Set<UUID> = []
+
     var body: some View {
-        ParentTabContainer(title: "Home") {
-            householdCard
+        ParentTabContainer(
+            title: "Home code",
+            headerAccessory: {
+                HouseholdCodeHeaderValue(code: data.household.loginCode)
+            }
+        ) {
+            ChorraSectionHeader(title: "Parents")
+
+            if data.parents.isEmpty {
+                ParentHomeGroupedCard {
+                    ChorraEmptyState(title: "No parents yet", systemImage: "person.2")
+                }
+            } else {
+                ParentHomeGroupedCard {
+                    ForEach(Array(data.parents.enumerated()), id: \.element.id) { index, parent in
+                        ParentSummaryRow(
+                            profile: parent,
+                            isCurrentUser: parent.id == data.profile.id
+                        )
+
+                        if index < data.parents.count - 1 {
+                            ChorraDivider()
+                        }
+                    }
+                }
+            }
 
             ChorraSectionHeader(
                 title: "Children",
@@ -154,77 +194,81 @@ private struct ParentHomeTab: View {
                     ChorraEmptyState(title: "No children yet", systemImage: "person.2")
                 }
             } else {
-                ChorraCard {
-                    ForEach(Array(data.children.enumerated()), id: \.element.id) { index, child in
-                        ChildSummaryRow(child: child, points: points(for: child))
-
-                        if index < data.children.count - 1 {
-                            ChorraDivider()
-                        }
+                ForEach(data.children) { child in
+                    CollapsibleChildCard(
+                        child: child,
+                        points: points(for: child),
+                        tasks: tasks(for: child),
+                        isExpanded: expandedChildIds.contains(child.id)
+                    ) {
+                        toggleChild(child)
                     }
                 }
             }
         }
     }
 
-    private var householdCard: some View {
-        ChorraCard {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(data.household.name)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(Color.chorraTextPrimary)
-
-                Text(data.profile.displayName)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.chorraTextSecondary)
-            }
-
-            HStack(spacing: 10) {
-                ChorraStatPill(
-                    title: "children",
-                    value: "\(data.children.count)",
-                    systemImage: "person.2.fill"
-                )
-
-                ChorraStatPill(
-                    title: "points",
-                    value: "\(totalPoints)",
-                    iconName: ChorraIconCatalog.pointIconName
-                )
-            }
-
-            ChorraDivider()
-
-            HStack {
-                Label("Child code", systemImage: "key.fill")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.chorraTextSecondary)
-
-                Spacer()
-
-                Text(data.household.loginCode)
-                    .font(.system(.headline, design: .monospaced).weight(.bold))
-                    .foregroundStyle(Color.chorraTextPrimary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.chorraPrimarySoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-        }
-    }
-
-    private var totalPoints: Int {
-        data.balances.reduce(0) { $0 + $1.points }
-    }
-
     private func points(for child: Child) -> Int {
         data.balances.first(where: { $0.childId == child.id })?.points ?? 0
     }
+
+    private func tasks(for child: Child) -> [ParentChildTaskItem] {
+        data.childTaskItems.filter { $0.assignment.childId == child.id }
+    }
+
+    private func toggleChild(_ child: Child) {
+        if expandedChildIds.contains(child.id) {
+            expandedChildIds.remove(child.id)
+        } else {
+            expandedChildIds.insert(child.id)
+        }
+    }
 }
 
-private struct ChildSummaryRow: View {
-    let child: Child
-    let points: Int
+private struct ParentHomeGroupedCard<Content: View>: View {
+    private let cornerRadius: CGFloat = 20
+
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Color.chorraBorder.opacity(0.42), lineWidth: 1)
+        }
+    }
+}
+
+private struct HouseholdCodeHeaderValue: View {
+    let code: String
+
+    var body: some View {
+        Text(code)
+            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+            .foregroundStyle(Color.chorraPrimary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.chorraSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityLabel("Home code \(code)")
+    }
+}
+
+private struct ParentSummaryRow: View {
+    let profile: Profile
+    let isCurrentUser: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -232,29 +276,159 @@ private struct ChildSummaryRow: View {
                 Circle()
                     .fill(Color.chorraPrimarySoft)
 
-                Text(String(child.displayName.prefix(1)).uppercased())
+                Text(String(profile.displayName.prefix(1)).uppercased())
                     .font(.headline.weight(.bold))
                     .foregroundStyle(Color.chorraPrimary)
             }
             .frame(width: 44, height: 44)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(child.displayName)
+                Text(profile.displayName)
                     .font(.headline)
                     .foregroundStyle(Color.chorraTextPrimary)
 
-                Text("@\(child.loginName)")
+                Text("Parent")
                     .font(.caption)
                     .foregroundStyle(Color.chorraTextSecondary)
             }
 
             Spacer()
 
-            ChorraPointAmountLabel(amount: points, iconSize: 15)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(Color.chorraPrimary)
+            if isCurrentUser {
+                ChorraPill(title: "You", color: .chorraPrimary)
+            }
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct CollapsibleChildCard: View {
+    let child: Child
+    let points: Int
+    let tasks: [ParentChildTaskItem]
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        ParentHomeGroupedCard {
+            Button(action: onToggle) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.chorraPrimarySoft)
+
+                        Text(String(child.displayName.prefix(1)).uppercased())
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(Color.chorraPrimary)
+                    }
+                    .frame(width: 44, height: 44)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(child.displayName)
+                            .font(.headline)
+                            .foregroundStyle(Color.chorraTextPrimary)
+
+                        Text("@\(child.loginName)")
+                            .font(.caption)
+                            .foregroundStyle(Color.chorraTextSecondary)
+                    }
+
+                    Spacer()
+
+                    ChorraPointAmountLabel(amount: points, iconSize: 15)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(Color.chorraPrimary)
+
+                    Image(systemName: "chevron.down")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextSecondary)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isExpanded ? "Collapse \(child.displayName)" : "Expand \(child.displayName)")
+
+            if isExpanded {
+                ChorraDivider()
+
+                if tasks.isEmpty {
+                    ChorraEmptyState(title: "No active tasks", systemImage: "checklist")
+                        .padding(.vertical, -2)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(tasks) { item in
+                            ParentHomeChildTaskCardView(item: item)
+                        }
+                    }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: isExpanded)
+    }
+}
+
+private struct ParentHomeChildTaskCardView: View {
+    let item: ParentChildTaskItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ChorraIconView(
+                iconName: item.assignment.iconName,
+                size: 46,
+                background: .clear,
+                padding: 7
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.assignment.title)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
+                    .lineLimit(2)
+
+                ChorraPointAmountLabel(amount: item.assignment.pointValue, iconSize: 15)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextPrimary.opacity(0.82))
+
+                if let rejectionText {
+                    Text(rejectionText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.chorraError)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            ChorraPill(title: item.assignment.status.label, color: statusColor)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PastelCardColor.color(from: item.assignment.cardColorHex))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var rejectionText: String? {
+        guard let submission = item.latestSubmission, submission.status == .rejected else {
+            return nil
+        }
+
+        return submission.rejectionReason ?? "Needs more work"
+    }
+
+    private var statusColor: Color {
+        switch item.assignment.status {
+        case .created:
+            return .chorraTextSecondary
+        case .assigned:
+            return .chorraPrimary
+        case .submitted:
+            return .chorraWarning
+        case .rejected:
+            return .chorraError
+        case .completed:
+            return .chorraSuccess
+        }
     }
 }
 
@@ -317,14 +491,35 @@ private struct ParentTasksTab: View {
         .sheet(item: $reviewingTask) { item in
             ParentTaskReviewSheet(item: item)
         }
-        .sheet(item: $assigningTask) { item in
-            AssignTaskView(item: item, children: data.children)
-                .environmentObject(appModel)
-        }
         .sheet(item: $editingTask) { item in
             TaskFormView(item: item)
                 .environmentObject(appModel)
         }
+        .overlay {
+            if let assigningTask {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+
+                    AssignTaskDialog(
+                        children: data.children,
+                        isWorking: appModel.isWorking
+                    ) {
+                        self.assigningTask = nil
+                    } onAssign: { childId in
+                        Task {
+                            await appModel.assignTask(assigningTask.task, childId: childId)
+                            if appModel.errorMessage == nil {
+                                self.assigningTask = nil
+                            }
+                        }
+                    }
+                    .padding(24)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: assigningTask?.id)
     }
 }
 
@@ -339,6 +534,14 @@ private struct ParentRewardsTab: View {
 
     var body: some View {
         ParentTabContainer(title: "Rewards") {
+            if !data.redemptions.isEmpty {
+                ChorraSectionHeader(title: "Reward history")
+
+                RewardHistoryCarouselView(
+                    items: data.redemptions
+                )
+            }
+
             ChorraSectionHeader(
                 title: "Rewards",
                 actionTitle: "Create",
@@ -872,7 +1075,7 @@ private struct TaskFormView: View {
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.chorraSurface.ignoresSafeArea())
+            .background(Color.chorraSoftSurface.ignoresSafeArea())
             .tint(.chorraPrimary)
         }
         .overlay {
@@ -953,79 +1156,99 @@ private struct TaskFormView: View {
     }
 }
 
-private struct AssignTaskView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appModel: AppViewModel
-
-    let item: ParentTaskItem
+private struct AssignTaskDialog: View {
     let children: [Child]
+    let isWorking: Bool
+    let onCancel: () -> Void
+    let onAssign: (UUID) -> Void
 
     @State private var selectedChildId: UUID?
 
+    init(
+        children: [Child],
+        isWorking: Bool,
+        onCancel: @escaping () -> Void,
+        onAssign: @escaping (UUID) -> Void
+    ) {
+        self.children = children
+        self.isWorking = isWorking
+        self.onCancel = onCancel
+        self.onAssign = onAssign
+        _selectedChildId = State(initialValue: children.first?.id)
+    }
+
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Task") {
-                    HStack(spacing: 12) {
-                        ChorraIconView(
-                            iconName: item.task.iconName,
-                            size: 44,
-                            background: .clear,
-                            padding: 7
-                        )
+        VStack(spacing: 18) {
+            HStack(spacing: 12) {
+                Text("Assign to")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Color.chorraTextPrimary)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.task.title)
-                                .font(.headline.weight(.bold))
-                                .foregroundStyle(Color.chorraTextPrimary)
+                Spacer()
 
-                            ChorraPointAmountLabel(amount: item.task.pointValue, iconSize: 15)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(Color.chorraTextSecondary)
-                        }
-                    }
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Color.chorraTextSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.chorraSoftSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
+                .buttonStyle(.plain)
+                .disabled(isWorking)
+                .accessibilityLabel("Close")
+            }
 
-                Section("Assign to") {
-                    Picker("Child", selection: Binding(
-                        get: { selectedChildId ?? children.first?.id },
-                        set: { selectedChildId = $0 }
-                    )) {
-                        ForEach(children) { child in
-                            Text(child.displayName).tag(Optional(child.id))
-                        }
-                    }
+            Picker("Child", selection: Binding(
+                get: { selectedChildId ?? children.first?.id },
+                set: { selectedChildId = $0 }
+            )) {
+                ForEach(children) { child in
+                    Text(child.displayName).tag(Optional(child.id))
                 }
             }
-            .chorraFormBackground()
-            .navigationTitle("Assign task")
-            .chorraNavigationBar()
-            .onAppear {
-                selectedChildId = selectedChildId ?? children.first?.id
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(Color.chorraSoftSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.chorraBorder, lineWidth: 1)
             }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .tint(.chorraSurface)
+            .disabled(isWorking || children.isEmpty)
+
+            HStack(spacing: 12) {
+                Button(action: onCancel) {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(ChorraSecondaryButtonStyle())
+                .disabled(isWorking)
 
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Assign") {
-                        guard let childId = selectedChildId ?? children.first?.id else {
-                            return
-                        }
-
-                        Task {
-                            await appModel.assignTask(item.task, childId: childId)
-                            if appModel.errorMessage == nil {
-                                dismiss()
-                            }
-                        }
+                Button {
+                    guard let childId = selectedChildId ?? children.first?.id else {
+                        return
                     }
-                    .tint(.chorraSurface)
-                    .disabled(appModel.isWorking || !canAssign)
+
+                    onAssign(childId)
+                } label: {
+                    Text("Assign")
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(ChorraPrimaryButtonStyle())
+                .disabled(isWorking || !canAssign)
             }
+        }
+        .padding(18)
+        .frame(maxWidth: 340)
+        .background(Color.chorraSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.chorraBorder, lineWidth: 1)
         }
     }
 
@@ -1657,6 +1880,7 @@ private extension ParentDashboardData {
             rewardName: reward.name,
             rewardIconName: reward.iconName,
             rewardPointCost: reward.pointCost,
+            rewardCardColorHex: reward.cardColorHex,
             redeemedAt: "2026-05-29"
         )
 
@@ -1677,6 +1901,24 @@ private extension ParentDashboardData {
                 createdAt: "2026-05-29",
                 updatedAt: "2026-05-29"
             ),
+            parents: [
+                Profile(
+                    id: parentId,
+                    householdId: householdId,
+                    role: .parent,
+                    displayName: "Tommy",
+                    createdAt: "2026-05-29",
+                    updatedAt: "2026-05-29"
+                ),
+                Profile(
+                    id: UUID(),
+                    householdId: householdId,
+                    role: .parent,
+                    displayName: "Mia",
+                    createdAt: "2026-05-29",
+                    updatedAt: "2026-05-29"
+                )
+            ],
             children: [child],
             balances: [
                 ChildPointsBalance(
@@ -1684,6 +1926,12 @@ private extension ParentDashboardData {
                     householdId: householdId,
                     points: 18,
                     lastEarnedAt: "2026-05-29"
+                )
+            ],
+            childTaskItems: [
+                ParentChildTaskItem(
+                    assignment: assignment,
+                    latestSubmission: submission
                 )
             ],
             taskItems: [

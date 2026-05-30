@@ -11,11 +11,13 @@ struct AuthView: View {
     @EnvironmentObject private var appModel: AppViewModel
     @State private var authMode: AuthMode = .parent
     @State private var parentMode: ParentAuthMode = .signIn
+    @State private var parentSignUpMode: ParentSignUpMode = .createHousehold
 
     @State private var email = ""
     @State private var password = ""
     @State private var displayName = ""
     @State private var householdName = ""
+    @State private var parentHouseholdCode = ""
 
     @State private var householdCode = ""
     @State private var childLoginName = ""
@@ -74,23 +76,47 @@ struct AuthView: View {
                         .textContentType(.name)
                         .chorraInput()
 
-                    TextField("Household name", text: $householdName)
-                        .chorraInput()
+                    Picker("Account setup", selection: $parentSignUpMode) {
+                        Text("Create household").tag(ParentSignUpMode.createHousehold)
+                        Text("Join household").tag(ParentSignUpMode.joinHousehold)
+                    }
+                    .pickerStyle(.segmented)
+                    .tint(.chorraPrimary)
+
+                    switch parentSignUpMode {
+                    case .createHousehold:
+                        TextField("Household name", text: $householdName)
+                            .chorraInput()
+                    case .joinHousehold:
+                        TextField("Home code", text: $parentHouseholdCode)
+                            .textInputAutocapitalization(.characters)
+                            .chorraInput()
+                    }
                 }
             }
 
-            Button(parentMode == .signIn ? "Sign in" : "Create parent account") {
+            Button(parentButtonTitle) {
                 Task {
                     switch parentMode {
                     case .signIn:
                         await appModel.signInParent(email: email, password: password)
                     case .signUp:
-                        await appModel.signUpParent(
-                            email: email,
-                            password: password,
-                            displayName: displayName,
-                            householdName: householdName
-                        )
+                        switch parentSignUpMode {
+                        case .createHousehold:
+                            await appModel.signUpParent(
+                                email: email,
+                                password: password,
+                                displayName: displayName,
+                                householdName: householdName
+                            )
+                        case .joinHousehold:
+                            await appModel.signUpParentToHousehold(
+                                email: email,
+                                password: password,
+                                displayName: displayName,
+                                householdCode: parentHouseholdCode
+                            )
+                        }
                     }
                 }
             }
@@ -106,13 +132,13 @@ struct AuthView: View {
                     .font(.headline)
                     .foregroundStyle(Color.chorraTextPrimary)
 
-                Text("Use the household code and PIN from your parent.")
+                Text("Use the home code and PIN from your parent.")
                     .font(.subheadline)
                     .foregroundStyle(Color.chorraTextSecondary)
             }
 
             VStack(spacing: 10) {
-                TextField("Household code", text: $householdCode)
+                TextField("Home code", text: $householdCode)
                     .textInputAutocapitalization(.characters)
                     .chorraInput()
 
@@ -142,10 +168,34 @@ struct AuthView: View {
     private var canSubmitParent: Bool {
         !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && password.count >= 6
-            && (parentMode == .signIn || (
-                !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    && !householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ))
+            && (parentMode == .signIn || canSubmitParentSignUp)
+    }
+
+    private var canSubmitParentSignUp: Bool {
+        guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+
+        switch parentSignUpMode {
+        case .createHousehold:
+            return !householdName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .joinHousehold:
+            return !parentHouseholdCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private var parentButtonTitle: String {
+        switch parentMode {
+        case .signIn:
+            return "Sign in"
+        case .signUp:
+            switch parentSignUpMode {
+            case .createHousehold:
+                return "Create parent account"
+            case .joinHousehold:
+                return "Join household"
+            }
+        }
     }
 
     private var canSubmitChild: Bool {
@@ -163,6 +213,11 @@ private enum AuthMode {
 private enum ParentAuthMode {
     case signIn
     case signUp
+}
+
+private enum ParentSignUpMode {
+    case createHousehold
+    case joinHousehold
 }
 
 #Preview {

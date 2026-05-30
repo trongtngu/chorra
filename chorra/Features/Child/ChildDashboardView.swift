@@ -202,6 +202,14 @@ private struct ChildRewardsTab: View {
 
     var body: some View {
         ChildTabContainer(title: "Rewards") {
+            if !data.redemptions.isEmpty {
+                ChorraSectionHeader(title: "Reward history")
+
+                RewardHistoryCarouselView(
+                    items: data.redemptions
+                )
+            }
+
             ChorraSectionHeader(title: "Rewards")
 
             if data.rewards.isEmpty {
@@ -882,6 +890,7 @@ private extension ChildDashboardData {
             rewardName: "Sticker pack",
             rewardIconName: ChorraIconCatalog.defaultIconName,
             rewardPointCost: 12,
+            rewardCardColorHex: PastelCardColor.allowedHexes[3],
             redeemedAt: "2026-05-29"
         )
 
@@ -915,7 +924,7 @@ private extension ChildDashboardData {
                 )
             ],
             rewards: [RewardItem(reward: reward)],
-            redemptions: [RewardRedemptionItem(redemption: redemption, child: nil)]
+            redemptions: [RewardRedemptionItem(redemption: redemption, child: child)]
         )
     }
 }

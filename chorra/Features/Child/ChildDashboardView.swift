@@ -867,6 +867,7 @@ private extension ChildDashboardData {
             cardColorHex: task.cardColorHex,
             iconName: task.iconName,
             status: .assigned,
+            isArchived: false,
             assignedAt: "2026-05-29"
         )
         let reward = Reward(

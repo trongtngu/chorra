@@ -155,6 +155,32 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func updateTaskAssignment(
+        assignment: TaskAssignment,
+        title: String,
+        pointValue: Int,
+        cardColorHex: String,
+        iconName: String
+    ) async {
+        await run {
+            let data = try await serviceOrThrow().updateTaskAssignment(
+                assignment: assignment,
+                title: title,
+                pointValue: pointValue,
+                cardColorHex: cardColorHex,
+                iconName: iconName
+            )
+            session = .parent(try await decorate(data))
+        }
+    }
+
+    func archiveTaskAssignment(_ assignment: TaskAssignment) async {
+        await run {
+            let data = try await serviceOrThrow().archiveTaskAssignment(assignment)
+            session = .parent(try await decorate(data))
+        }
+    }
+
     func submitTaskCompletion(assignment: TaskAssignment, child: Child, jpegData: Data) async {
         await run {
             let data = try await serviceOrThrow().submitTaskCompletion(

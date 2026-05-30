@@ -230,14 +230,15 @@ struct ChorraToolbarIcon: View {
 struct ChorraPill: View {
     let title: String
     let color: Color
+    var isFilled = false
 
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .foregroundStyle(color)
-            .background(color.opacity(0.12))
+            .foregroundStyle(isFilled ? Color.chorraSurface : color)
+            .background(isFilled ? color : color.opacity(0.12))
             .clipShape(Capsule())
     }
 }

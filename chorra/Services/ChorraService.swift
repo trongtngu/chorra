@@ -194,6 +194,36 @@ final class ChorraService {
         return try await loadCurrentParentDashboard()
     }
 
+    func updateTaskAssignment(
+        assignment: TaskAssignment,
+        title: String,
+        pointValue: Int,
+        cardColorHex: String,
+        iconName: String
+    ) async throws -> ParentDashboardData {
+        let _: TaskAssignment = try await client
+            .rpc("update_task_assignment", params: UpdateTaskAssignmentParams(
+                pAssignmentId: assignment.id,
+                pTitle: title,
+                pPointValue: pointValue,
+                pCardColorHex: cardColorHex,
+                pIconName: ChorraIconCatalog.normalizedIconName(iconName)
+            ))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
+    func archiveTaskAssignment(_ assignment: TaskAssignment) async throws -> ParentDashboardData {
+        let _: TaskAssignment = try await client
+            .rpc("archive_task_assignment", params: ArchiveTaskAssignmentParams(pAssignmentId: assignment.id))
+            .execute()
+            .value
+
+        return try await loadCurrentParentDashboard()
+    }
+
     func submitTaskCompletion(assignment: TaskAssignment, child: Child, jpegData: Data) async throws -> ChildDashboardData {
         let submissionId = UUID()
         let storagePath = "\(child.householdId.uuidString)/\(child.id.uuidString)/\(submissionId.uuidString)/completion.jpg"
@@ -353,6 +383,7 @@ final class ChorraService {
             .from("task_assignments")
             .select()
             .eq("household_id", value: profile.householdId.uuidString)
+            .eq("is_archived", value: false)
             .execute()
             .value
 
@@ -416,6 +447,7 @@ final class ChorraService {
         let assignments: [TaskAssignment] = try await client
             .from("task_assignments")
             .select()
+            .eq("is_archived", value: false)
             .execute()
             .value
 
@@ -670,6 +702,30 @@ private struct ArchiveTaskParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case pTaskId = "p_task_id"
+    }
+}
+
+private struct UpdateTaskAssignmentParams: Encodable {
+    let pAssignmentId: UUID
+    let pTitle: String
+    let pPointValue: Int
+    let pCardColorHex: String
+    let pIconName: String
+
+    enum CodingKeys: String, CodingKey {
+        case pAssignmentId = "p_assignment_id"
+        case pTitle = "p_title"
+        case pPointValue = "p_point_value"
+        case pCardColorHex = "p_card_color_hex"
+        case pIconName = "p_icon_name"
+    }
+}
+
+private struct ArchiveTaskAssignmentParams: Encodable {
+    let pAssignmentId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case pAssignmentId = "p_assignment_id"
     }
 }
 

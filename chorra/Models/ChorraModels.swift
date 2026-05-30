@@ -140,6 +140,7 @@ struct TaskAssignment: Codable, Identifiable, Hashable {
     let cardColorHex: String
     let iconName: String
     let status: TaskStatus
+    let isArchived: Bool
     let assignedAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -153,6 +154,7 @@ struct TaskAssignment: Codable, Identifiable, Hashable {
         case cardColorHex = "card_color_hex"
         case iconName = "icon_name"
         case status
+        case isArchived = "is_archived"
         case assignedAt = "assigned_at"
     }
 }

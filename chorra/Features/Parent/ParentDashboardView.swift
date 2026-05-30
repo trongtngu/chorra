@@ -159,7 +159,6 @@ private struct ParentHomeTab: View {
     let onAddChild: () -> Void
 
     @State private var expandedChildIds: Set<UUID> = []
-    @State private var selectedAssignedTask: ParentChildTaskItem?
     @State private var editingAssignedTask: ParentChildTaskItem?
     @State private var deletingAssignedTask: ParentChildTaskItem?
 
@@ -188,49 +187,25 @@ private struct ParentHomeTab: View {
                         child: child,
                         points: points(for: child),
                         tasks: tasks(for: child),
-                        isExpanded: expandedChildIds.contains(child.id)
+                        isExpanded: expandedChildIds.contains(child.id),
+                        isWorking: appModel.isWorking
                     ) {
                         toggleChild(child)
-                    } onTaskActions: { item in
+                    } onEditTask: { item in
                         guard !appModel.isWorking else {
                             return
                         }
 
-                        selectedAssignedTask = item
+                        editingAssignedTask = item
+                    } onDeleteTask: { item in
+                        guard !appModel.isWorking else {
+                            return
+                        }
+
+                        deletingAssignedTask = item
                     }
                 }
             }
-        }
-        .confirmationDialog(
-            selectedAssignedTask?.assignment.title ?? "Task actions",
-            isPresented: Binding(
-                get: { selectedAssignedTask != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        selectedAssignedTask = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible,
-            presenting: selectedAssignedTask
-        ) { item in
-            Button("Edit") {
-                editingAssignedTask = item
-                selectedAssignedTask = nil
-            }
-            .disabled(appModel.isWorking)
-
-            Button("Delete", role: .destructive) {
-                deletingAssignedTask = item
-                selectedAssignedTask = nil
-            }
-            .disabled(appModel.isWorking)
-
-            Button("Cancel", role: .cancel) {
-                selectedAssignedTask = nil
-            }
-        } message: { item in
-            Text("Manage \(item.assignment.title)")
         }
         .sheet(item: $editingAssignedTask) { item in
             AssignedTaskFormView(item: item)
@@ -401,8 +376,10 @@ private struct CollapsibleChildCard: View {
     let points: Int
     let tasks: [ParentChildTaskItem]
     let isExpanded: Bool
+    let isWorking: Bool
     let onToggle: () -> Void
-    let onTaskActions: (ParentChildTaskItem) -> Void
+    let onEditTask: (ParentChildTaskItem) -> Void
+    let onDeleteTask: (ParentChildTaskItem) -> Void
 
     var body: some View {
         ChorraCard {
@@ -455,8 +432,13 @@ private struct CollapsibleChildCard: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(tasks) { item in
-                            ParentHomeChildTaskCardView(item: item) {
-                                onTaskActions(item)
+                            ParentHomeChildTaskCardView(
+                                item: item,
+                                isWorking: isWorking
+                            ) {
+                                onEditTask(item)
+                            } onDelete: {
+                                onDeleteTask(item)
                             }
                         }
                     }
@@ -474,7 +456,9 @@ private struct CollapsibleChildCard: View {
 
 private struct ParentHomeChildTaskCardView: View {
     let item: ParentChildTaskItem
-    let onActions: () -> Void
+    let isWorking: Bool
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -516,8 +500,23 @@ private struct ParentHomeChildTaskCardView: View {
         .background(PastelCardColor.color(from: item.assignment.cardColorHex))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .onLongPressGesture(perform: onActions)
-        .accessibilityAction(named: Text("Show task actions"), onActions)
+        .contextMenu {
+            Button {
+                edit()
+            } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .disabled(isWorking)
+
+            Button(role: .destructive) {
+                delete()
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .disabled(isWorking)
+        }
+        .accessibilityAction(named: Text("Edit assigned task"), edit)
+        .accessibilityAction(named: Text("Delete assigned task"), delete)
     }
 
     private var rejectionText: String? {
@@ -541,6 +540,22 @@ private struct ParentHomeChildTaskCardView: View {
         case .completed:
             return .chorraSuccess
         }
+    }
+
+    private func edit() {
+        guard !isWorking else {
+            return
+        }
+
+        onEdit()
+    }
+
+    private func delete() {
+        guard !isWorking else {
+            return
+        }
+
+        onDelete()
     }
 }
 
@@ -830,7 +845,9 @@ private struct ParentTaskReviewSheet: View {
     @State private var rejectionReason = ""
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            reviewHeader
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     ParentTaskReviewCardView(item: item)
@@ -846,24 +863,36 @@ private struct ParentTaskReviewSheet: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 20)
+                .padding(.top, 12)
                 .padding(.bottom, 28)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.chorraSoftSurface.ignoresSafeArea())
-            .safeAreaInset(edge: .bottom) {
-                reviewControls
-            }
-            .navigationTitle("Review task")
-            .navigationBarTitleDisplayMode(.inline)
-            .chorraNavigationBar()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                        .tint(.chorraSurface)
-                }
-            }
         }
+        .background(Color.chorraSoftSurface.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            reviewControls
+        }
+    }
+
+    private var reviewHeader: some View {
+        HStack {
+            Spacer()
+
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.chorraTextSecondary)
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 4)
+        .background(Color.chorraSoftSurface)
     }
 
     private var reviewControls: some View {
@@ -897,7 +926,7 @@ private struct ParentTaskReviewSheet: View {
                     Text("Reject")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(ChorraSecondaryButtonStyle(tint: .chorraError))
+                .buttonStyle(ParentReviewRejectButtonStyle())
                 .disabled(appModel.isWorking || submission == nil)
             }
         }
@@ -1093,6 +1122,18 @@ private struct AddChildView: View {
         !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !loginName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && pin.count >= 4
+    }
+}
+
+private struct ParentReviewRejectButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .foregroundStyle(Color.chorraError)
+            .background(Color.chorraError.opacity(configuration.isPressed ? 0.18 : 0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
